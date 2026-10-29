@@ -42,8 +42,15 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
+      - name: Preserve test signing identity
+        uses: actions/cache@v4
+        with:
+          path: ~/.config/.android/debug.keystore
+          key: pitnudge-android-debug-signing-v1
       - name: Build installable debug APK
-        run: gradle --no-daemon --stacktrace :app:signingReport :app:assembleDebug
+        run: gradle --no-daemon --stacktrace :app:assembleDebug
+      - name: Report Android certificate fingerprints
+        run: gradle --no-daemon :app:signingReport
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:

@@ -1,0 +1,89 @@
+ your first drive manually.</p></div>'}</section></div>`}
+function service(){let v=vehicle();if(!v)return intro('Care schedule','Maintenance','See what your vehicle needs next.')+noVehicle();let s=Object.keys(DEFAULTS).map(k=>serviceInfo(v,k)).sort((a,b)=>severity[a.status]-severity[b.status]);return intro('Vehicle care','Maintenance','Default intervals are examples only. Adjust each reminder to your owner’s manual.',`<button class="button sm" data-action="service">${icon('plus',16)} Log service</button>`)+`<div class="stack"><div class="banner"><strong>Vehicle-specific advice:</strong> Recommended service timing varies by car, oil type, driving conditions, and manufacturer. These starter reminders are customizable and are not official service schedules.</div><section class="panel"><div class="panelHead"><h2>${esc(vehicleName(v))}</h2><span class="topTip">${miles(v.mileage)} mi</span></div>${s.map(x=>serviceTile(x)).join('')}</section><section class="panel"><div class="panelHead"><h2>DIY help</h2>${icon('book')}</div><p class="muted small">Basic owner checklists, plus a quick way to find local professional help.</p><div class="actions"><button class="button secondary" data-action="diy">See DIY basics</button><button class="button ghost" data-page="shops">Find a mechanic</button></div></section></div>`}
+function shopLink(category){let queries={mechanic:'auto repair shops near me',oil:'oil change near me',tires:'tire shops near me',brakes:'brake repair shops near me',battery:'car battery replacement near me',towing:'auto towing near me'};return 'https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(queries[category]||queries.mechanic)}
+function shops(){return intro('Help near you','Find a mechanic','Search live shop listings, ratings, hours, and directions in Google Maps.')+`<div class="stack"><section class="shopPanel"><div class="mapArtwork" role="img" aria-label="Decorative illustration of a map, not live mechanic locations"><span class="mapPin one">📍</span><span class="mapPin two">📍</span><span class="mapPin three">📍</span><span class="mapCaption">Illustration · not live locations</span></div><h2 style="margin:0 0 7px">Need someone to fix it?</h2><p class="muted small" style="margin:0 0 18px">Open current nearby results with real shop details. You'll be able to call, check reviews, and get directions there.</p><a class="button" href="${shopLink('mechanic')}" rel="noopener noreferrer">${icon('pin',17)} Find mechanics near me</a></section><div class="grid2">${[['oil','Oil changes','droplet'],['tires','Tires & rotations','rotate'],['brakes','Brakes','shield'],['battery','Batteries','zap'],['towing','Towing','car']].map(([key,label,ico])=>`<a class="resultCard" style="text-decoration:none;color:var(--text)" href="${shopLink(key)}" rel="noopener noreferrer"><span style="display:flex;align-items:center;gap:10px">${icon(ico,21)} <strong>${label}</strong></span>${icon('arrow',17)}</a>`).join('')}</div><div class="note">PitNudge currently opens live search results in Google Maps; it does not yet display or verify individual mechanics inside the app. A built-in shop map could be added later.</div></div>`}
+function more(){return intro('Your vehicle hub','More tools','Keep your vehicles, receipts, and trip records organized.')+`<div class="tabline">${[['account','My account'],['garage','My garage'],['records','Receipts & costs'],['taxes','Tax records'],['settings','Settings']].map(([k,t])=>`<button class="pill ${moreTab===k?'selected':''}" data-more="${k}">${t}</button>`).join('')}</div>`+({account:accountSection,garage:garageSection,records:recordsSection,taxes:taxSection,settings:settingsSection}[moreTab]||accountSection)()}
+// Native authentication is disabled until an independent Firebase project is configured.
+// There are no passwords/tokens in the local HTML or browser storage.
+let account={configured:false,signedIn:false,uid:null,email:null,provider:null,syncActive:false,
+  serverSnapshot:null,cloudMessage:'Not connected',syncedAt:null};
+const cloudBridge=()=>window.NativePitNudge;
+function accountSection(){
+  const configured=account.configured;
+  const hasAccount=account.signedIn;
+  let name=account.email||'Your account';
+  let cloudStatus=account.syncActive?'Cloud sync enabled':account.cloudMessage;
+  return `<div class="stack">
+  <section class="panel"><div class="panelHead"><h2>${icon('car',19)} PitNudge account</h2><span class="status ${hasAccount?'good':'unknown'}">${hasAccount?'Signed in':'Guest mode'}</span></div>
+    ${hasAccount?`<p><strong>${esc(name)}</strong></p><p class="muted small">Your local garage is on this phone. Cloud backup status: <strong>${esc(cloudStatus)}</strong>.</p>
+    <div class="actions space"><button class="button secondary" data-action="cloudSave">Back up this phone</button><button class="button ghost" data-action="cloudRestore">Restore cloud backup</button><button class="button ghost" data-action="accountLogout">Sign out</button></div>`:
+    `<p class="muted">Sign in to save vehicle records under your own account and restore them when you switch phones.</p>
+    <div class="actions space"><button class="button" data-action="googleLogin" ${!configured?'disabled':''}>Continue with Google</button><button class="button secondary" data-action="appleLogin" ${!configured?'disabled':''}>Continue with Apple</button></div>
+    ${!configured?`<p class="small amber space">Account sign-in is not activated yet. PitNudge still works offline, and your garage stays on this phone until we finish secure cloud setup.</p>`:
+    `<p class="small muted space">Your information stays local until you sign in and select cloud backup.</p>`}`}
+  </section>
+  <section class="panel"><h2>What your account will save</h2><p class="muted small">Vehicles and odometer readings, maintenance records and schedules, trip logs, and service expenses. Receipt photos are included only while within current cloud document limits; larger photo backups will need separate secure image storage.</p>
+    <p class="muted small">Each account is stored separately. If PitNudge finds records on both your phone and in the cloud, it will ask which copy to use instead of deleting either silently.</p>
+    <div class="actions space"><button class="button secondary" data-action="backup">Save a local backup</button><button class="button ghost" data-more="settings">Backup settings</button></div>
+  </section>
+  </div>`;
+}
+window.PitNudgeAccount={
+  onAuthState(encoded){
+    try{const a=JSON.parse(encoded); account.configured=!!a.configured;account.uid=a.uid||null;
+      account.signedIn=!!a.uid;account.email=a.email||null;account.provider=a.provider||null;
+      account.syncActive=false;account.cloudMessage=a.uid?'Checking cloud backup…':'Not connected';
+      if(!a.uid) account.serverSnapshot=null;
+      if(page==='more'&&moreTab==='account')render();
+    }catch(e){console.error('Account state error',e)}
+  },
+  onCloudResult(encoded){
+    try{
+      let c=JSON.parse(encoded);if(!account.signedIn)return;
+      if(c.error){account.cloudMessage='Cloud error: '+c.error; account.syncActive=false;notify(account.cloudMessage);render();return;}
+      if(!c.found){account.serverSnapshot=null;account.cloudMessage='No cloud backup yet';account.syncActive=false;render();return;}
+      account.serverSnapshot=c.json||null;account.syncedAt=c.updatedAt||null;
+      let cloud=JSON.parse(c.json);
+      if(!Array.isArray(cloud.vehicles)||!Array.isArray(cloud.records)||!Array.isArray(cloud.trips))throw Error('Cloud backup has invalid data');
+      let localNonempty=Boolean(db.vehicles.length||db.records.length||db.trips.length);
+      if(!localNonempty){db={...blank(),...cloud,autoDetect:false};save();account.cloudMessage='Cloud garage restored';account.syncActive=true;notify('Your garage has been restored from your account.');render();return;}
+      account.syncActive=false;account.cloudMessage='Cloud and phone both have records — choose a copy';
+      if(page==='more'&&moreTab==='account')render();
+    }catch(e){account.cloudMessage='Could not read cloud data';account.syncActive=false;notify(account.cloudMessage)}
+  },
+  onCloudWrite(encoded){
+    try{const s=JSON.parse(encoded); account.cloudMessage=s.ok?'Cloud backup saved':'Backup failed: '+(s.error||'Please retry');
+      if(s.ok){account.syncActive=true;account.syncedAt=Date.now();}else account.syncActive=false;
+      if(page==='more'&&moreTab==='account')render();if(!s.ok)notify(account.cloudMessage);
+    }catch(e){console.error(e)}
+  },
+  onError(message){notify(message)}
+};
+function accountAction(action){
+ const native=cloudBridge();
+ if(action==='googleLogin'||action==='appleLogin'){
+   if(!account.configured){notify('Cloud accounts are not configured yet. Local records are safe.');return}
+   if(action==='googleLogin')native?.signInGoogle(); else native?.signInApple();return;
+ }
+ if(action==='accountLogout'){
+   if(!confirmAction('Sign out? Your current garage will remain on this device.'))return;
+   account.syncActive=false;native?.signOut();return;
+ }
+ if(!account.signedIn){notify('Sign in to use cloud backup.');return}
+ if(action==='cloudSave'){
+   const payload=JSON.stringify(db);
+   if(payload.length>700000){notify('Your local backup contains too many large receipt photos for cloud sync. Export a JSON backup while we add secure photo storage.');return}
+   if(account.serverSnapshot&&account.serverSnapshot!==payload&&!confirmAction('Overwrite the cloud copy with records from this phone? The older cloud copy will be replaced. Save a manual backup first if needed.'))return;
+   native?.saveCloud(payload);account.cloudMessage='Saving cloud backup…';render();return;
+ }
+ if(action==='cloudRestore'){
+   if(!account.serverSnapshot){native?.fetchCloud();notify('Checking cloud for your garage…');return}
+   if(!confirmAction('Replace the garage on this phone with the account backup? Export a local backup first if you need these records.'))return;
+   try{let data=JSON.parse(account.serverSnapshot);if(!Array.isArray(data.vehicles)||!Array.isArray(data.records)||!Array.isArray(data.trips))throw Error('Invalid data');
+     db={...blank(),...data,autoDetect:false};save();account.syncActive=true;account.cloudMessage='Cloud garage restored';notify('Your cloud garage has been restored.');render();
+   }catch(e){notify('Cloud backup could not be restored.')}return;
+ }
+}
+function garageSection(){let arr=db.vehicles;return `<div class="stack"><div class="panelHead"><h2>My vehicles</h2><button class="button sm" data-action="newVehicle">${icon('plus',15)} Add vehicle</button></div>${arr.length?arr.map(v=>`<div class="panel">${vehiclePicture(v,'garage')}<div class="labelRow"><div style="display:flex;gap:12px;align-items:center"><div><h2>${esc(vehicleName(v))}</h2><div class="muted small">${miles(v.mileage)} miles ${db.selected===v.id?'· Selected vehicle':''}</div></div></div><span class="status ${db.selected===v.id?'good':'unknown'}">${db.selected===v.id?'Active':'In garage'}</span></div><div class="actions space"><button class="button sm secondary" data-action="chooseVehicle" data-id="${v.id}">Select</button><button class="button sm ghost" data-action="editVehicle" data-id="${v.id}">Edit & update miles</button><button class="button sm ghost" data-action="deleteVehicle" data-id="${v.id}">Remove</button></div></div>`).join(''):noVehicle()}</div>`}
+function recordsSection(){let v=vehicle();if(!v)return noVehicle();let records=db.records.filter(r=>r.vehicleId===v.id).sort((a,b)=>b.date.localeCompare(a.date));let cost=records.reduce((s,r)=>s+Number(r.amount||0),0);return `<div class="stack"><div class="grid2"><div class="panel"><div class="statLabel">Recorded spending</div><div class="statNum">${money(cost)}</div><div class="small muted">For ${esc(vehicleName(v))}</div></div><div class="panel"><div class="statLabel">Saved records</div><div class="statNum">${records.length}</div><div class="small muted">Services and other vehicle costs</div></div></div><div class="actions"><button class="button" data-action="service">${icon('wrench',17)} Log service + receipt</button><button class="button secondary" data-action="expense">${icon('receipt',17)} Add other expense</button></div><div class="panel"><div class="panelHead"><h2>Service & receipt history</h2></div>${records.length?records.map(r=>`<div class="record">${r.photo?`<img class="recordPhoto" alt="Saved receipt photo" src="${esc(r.photo)}"/>`:''}<div style="flex:1;min-width:0"><div style="font-weight:800">${r.kind==='service'?(DEFAULTS[r.service]?.name||'Other service'):esc(r.category||'Other expense')}</div><div class="small muted">${humanDate(r.date)} · ${miles(r.mileage)} mi${r.note?' · '+esc(r.note):''}</div></div><div class="right"><div class="recordAmount">${money(r.amount)}</div><button class="button sm ghost" style="margin-top:7px" data-action="deleteRecord" data-id="${r.id}">Remove</button></div></div>`).join(''):'<div class="empty"><p>No receipts or maintenance costs yet. Add your first service record when you have it.</p></div>'}</div><div class="note">Receipt and vehicle photos are stored locally on this device, not uploaded to an account. Make a backup before clearing browser data or switching phones.</div></div>`}
+function taxSection(){let yr=new Date().getFullYear();let trips=db.trips.filter(t=>t.type==='business'&&String(t.date).startsWith(String(yr)));let business=trips.reduce((s,t)=>s+Number(t.miles),0);let all=db.trips.filter(t=>String(t.date).startsWith(String(yr)));let vehicleCosts=db.records.filter(r=>String(r.date).startsWith(String(yr))).reduce((s,r)=>s+Number(r.amount||0),0);return `<div class="stack"><div class="panel"><div class="eyebrow">${yr} tax organization</div><div class="grid2 space"><div><div class="statLabel">Logged business mileage</div><div class="valueLarge metric">${miles(business)} <span style="font-size:14px">mi</span></div></div><div><div class="statLabel">Vehicle costs recorded</div><div class="valueLarge metric">${money(vehicleCosts)}</di

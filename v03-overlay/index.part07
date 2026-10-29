@@ -1,0 +1,9 @@
+ip=null;stopWatchIfUnused();render()}if(a==='diy')diy();if(a==='exportTrips')exportTrips();if(a==='exportCosts')exportCosts();if(a==='backup')download('PitNudge-backup.json',JSON.stringify(db,null,2),'application/json');if(a==='import')$('importFile')?.click();if(a==='reset'&&confirmAction('Erase ALL PitNudge data saved in this browser? This cannot be undone unless you have a backup.')){if(activeTrip){activeTrip=null}if(watchId!==null){navigator.geolocation.clearWatch(watchId);watchId=null}db=blank();save();page='home';render();notify('Local data deleted.')}});
+document.addEventListener('change',async e=>{if(e.target.id==='currentVehicle'){if(activeTrip){notify('Finish your active trip before changing vehicles.');render();return}db.selected=e.target.value;save();render()}if(e.target.id==='autoDetect'||e.target.id==='autoDetectSettings')toggleAuto(e.target.checked);if(e.target.id==='liveCategory'&&activeTrip){activeTrip.type=e.target.value}if(e.target.id==='importFile'){let f=e.target.files[0];if(!f)return;try{let data=JSON.parse(await f.text());if(!Array.isArray(data.vehicles)||!Array.isArray(data.records)||!Array.isArray(data.trips))throw Error('Invalid PitNudge backup format');if(!confirmAction('Restore this backup? Your current data will be replaced.'))return;if(watchId!==null){navigator.geolocation.clearWatch(watchId);watchId=null}activeTrip=null;db={...blank(),...data,autoDetect:false};save();moreTab='garage';render();notify('Backup restored!')}catch(err){notify(err.message||'Could not import backup.')}e.target.value=''}});
+$('closeModal').addEventListener('click',()=>$('modal').close());
+window.addEventListener('beforeunload',e=>{if(activeTrip){e.preventDefault();e.returnValue=''}});
+render();
+if(window.NativePitNudge?.getAuthState){window.PitNudgeAccount.onAuthState(window.NativePitNudge.getAuthState());}
+</script>
+</body>
+</html>

@@ -1,9 +1,9 @@
 # PitNudge Android
 
-Android debug application for vehicle maintenance, trip logs, nearby mechanic searches and expense receipts.
+**v0.3 experimental Android APK** — vehicle maintenance, mileage logs, and example vehicle photos.
 
-**Version 0.1.3** adds an account screen and *backend-ready* Firebase Authentication and Firestore code, but **Google/Apple login and cloud backup are disabled until PitNudge's own Firebase project, Google OAuth setup, Apple developer configuration, Firestore security rules, and stable APK signing have been configured and tested.** No user records are uploaded from the unconfigured build. The app continues working locally without an account.
+The Android build uses the baseline project archive plus the `v03-overlay/` source files, which are applied by the GitHub Actions workflow. The HTML is divided into several plain-text parts because the source archive transfer exceeded the connector's size/safety limit.
 
-The GitHub Actions workflow packages the source archive into an Android debug APK. This is **not** a Play Store release. Foreground GPS is experimental; automatic background driving detection is not implemented.
+**Vehicle photos:** When a network connection is available, the app searches Wikimedia Commons for an image whose filename and metadata match the selected make and model and whose metadata identifies a permitted reuse license. Photos may depict a nearby year or different color, and some models will not have a photo. Author and license links are displayed. The app falls back to a locally bundled illustration for unmatched models or offline use. User-selected photos take precedence. Review image licenses before any public release.
 
-See `ACCOUNT_SETUP.md` inside the project ZIP for setup instructions and data safety limitations. Receipt images exceeding Firestore's snapshot limit need Cloud Storage integration before full backup can be promised.
+**Still experimental:** Google and Apple sign-in and actual cloud backups require Firebase configuration; automatic locked-screen mileage detection is not implemented. Test with non-sensitive vehicle information. For testing, keep JSON backups before uninstalling.

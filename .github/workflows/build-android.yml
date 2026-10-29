@@ -14,6 +14,15 @@ jobs:
       - uses: actions/checkout@v4
       - name: Extract PitNudge Android project
         run: unzip -oq PitNudge-Android-Cloud-Build-Project.zip
+      - name: Apply PitNudge v0.3 vehicle photo update
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat v03-overlay/index.part?? > app/src/main/assets/index.html
+          cp v03-overlay/MainActivity.java app/src/main/java/com/pitnudge/app/MainActivity.java
+          cp v03-overlay/app-build.gradle app/build.gradle
+          cp v03-overlay/root-build.gradle build.gradle
+          echo "Applied v0.3 source overlay to Android project"
       - uses: actions/setup-java@v4
         with:
           distribution: temurin

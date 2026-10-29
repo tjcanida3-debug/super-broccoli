@@ -24,6 +24,16 @@ jobs:
           cp v03-overlay/root-build.gradle build.gradle
           cp v03-overlay/google-services.json app/google-services.json
           echo "Applied v0.3 source overlay to Android project"
+      - name: Install Android GPS mileage tracking update (v0.5)
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat v05-overlay/html.b64.part?? | base64 -d > app/src/main/assets/index.html
+          cat v05-overlay/java.b64.part?? | base64 -d > app/src/main/java/com/pitnudge/app/MainActivity.java
+          cat v05-overlay/service.b64.part?? | base64 -d > app/src/main/java/com/pitnudge/app/MileageService.java
+          cat v05-overlay/manifest.b64.part?? | base64 -d > app/src/main/AndroidManifest.xml
+          cat v05-overlay/gradle.b64.part?? | base64 -d > app/build.gradle
+          echo 'Applied native GPS mileage update'
       - uses: actions/setup-java@v4
         with:
           distribution: temurin

@@ -1,9 +1,11 @@
 # PitNudge Android
 
-**v0.3 experimental Android APK** — vehicle maintenance, mileage logs, and example vehicle photos.
+**v0.5 — GPS Mileage Tracking Test Build**
 
-The Android build uses the baseline project archive plus the `v03-overlay/` source files, which are applied by the GitHub Actions workflow. The HTML is divided into several plain-text parts because the source archive transfer exceeded the connector's size/safety limit.
+The Android app supports opted-in **manual GPS trips and drive auto-detection**, including while the screen is locked, through an Android foreground location service with a visible notification. To begin monitoring, open PitNudge and tap **Trips → Start GPS trip** or switch on **Auto-detect driving**. Automatic detection is not enabled around the clock: you must turn it on before a drive. Auto-detected trips end after ~3 minutes stationary. Manual trips end using **Finish trip** or the tracking notification.
 
-**Vehicle photos:** When a network connection is available, the app searches Wikimedia Commons for an image whose filename and metadata match the selected make and model and whose metadata identifies a permitted reuse license. Photos may depict a nearby year or different color, and some models will not have a photo. Author and license links are displayed. The app falls back to a locally bundled illustration for unmatched models or offline use. User-selected photos take precedence. Review image licenses before any public release.
+The Android service stores estimated distance and trip metadata locally and queues completed trips until the WebView imports them. It does not store raw routes. Completed trips update the selected car's **estimated** odometer once and can sync through Firebase if the user has enabled it. GPS cannot read the real vehicle odometer, and accuracy depends on signal and location permissions. Back up garage data before replacing debug APKs.
 
-**Still experimental:** Google and Apple sign-in and actual cloud backups require Firebase configuration; automatic locked-screen mileage detection is not implemented. Test with non-sensitive vehicle information. For testing, keep JSON backups before uninstalling.
+This public repository retains the earlier baseline archive, the v0.3 vehicle-photo and configured Firebase overlay, and the v0.5 GPS-mileage overlay. GitHub Actions reconstructs the sources and builds a debug APK. The test signing identity is preserved using Actions cache when available.
+
+Photo licensing and attribution still apply. Apple sign-in, 24/7 passive driving detection, and production release signing are not complete.

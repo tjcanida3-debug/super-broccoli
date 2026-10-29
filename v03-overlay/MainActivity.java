@@ -17,7 +17,7 @@ import androidx.credentials.GetCredentialResponse;
 import androidx.credentials.CustomCredential;
 import androidx.credentials.CredentialManagerCallback;
 import androidx.credentials.exceptions.GetCredentialException;
-import com.google.android.libraries.identity.googleid.GetGoogleIdOption;
+import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption;
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential;
 import com.google.firebase.FirebaseApp;
 import com.google.firebase.auth.FirebaseAuth;
@@ -228,8 +228,10 @@ public class MainActivity extends Activity {
         if(!cloudConfigured){emitError("Cloud sign-in is not configured yet.");return;}
         int clientId=getResources().getIdentifier("default_web_client_id","string",getPackageName());
         if(clientId==0){emitError("Google sign-in needs a Firebase web client ID.");return;}
-        GetGoogleIdOption option=new GetGoogleIdOption.Builder()
-            .setServerClientId(getString(clientId)).setFilterByAuthorizedAccounts(false).build();
+        // This is an explicit button tap, so request Google's dedicated account-picker
+        // flow instead of the bottom-sheet GetGoogleIdOption (which can yield
+        // NoCredentialException even with a Google account on the device).
+        GetSignInWithGoogleOption option=new GetSignInWithGoogleOption.Builder(getString(clientId)).build();
         GetCredentialRequest request=new GetCredentialRequest.Builder().addCredentialOption(option).build();
         CredentialManager.create(this).getCredentialAsync(this,request,null,getMainExecutor(),
             new CredentialManagerCallback<GetCredentialResponse,GetCredentialException>(){
@@ -248,7 +250,14 @@ public class MainActivity extends Activity {
                             .addOnFailureListener(e -> emitError("Google sign-in failed: "+e.getMessage()));
                     }catch(Exception ex){emitError("Google token could not be read.");}
                 }
-                @Override public void onError(GetCredentialException error){emitError("Google sign-in cancelled or unavailable: "+error.getMessage());}
+                @Override public void onError(GetCredentialException error){
+                    android.util.Log.w("PitNudge", "Google sign-in request failed: "+error.getType(), error);
+                    if(error instanceof androidx.credentials.exceptions.NoCredentialException) {
+                        emitError("Google account picker couldn't find an available account. Check your phone has a Google account in Settings, and update Google Play services.");
+                    } else {
+                        emitError("Google sign-in couldn't finish: "+error.getMessage());
+                    }
+                }
             });
     }
     private void fetchCloud(){

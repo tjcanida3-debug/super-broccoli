@@ -1,0 +1,69 @@
+e.garagePhoto{height:174px;width:100%;margin-bottom:13px}
+.vehiclePicture.formPhoto{height:162px;width:100%;margin:8px 0 12px}
+.vehiclePicture .imageType{position:absolute;top:7px;right:7px;color:#e5edf5;background:#0b1420bc;padding:3px 7px;border-radius:7px;font-size:10px;font-weight:700;letter-spacing:.1px}
+.vehiclePicture .pictureCredit{position:absolute;bottom:0;left:0;right:0;padding:4px 6px;background:#0b121de8;color:#edf3ff;font-size:9px;line-height:1.3;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.pictureCredit a{color:#bdd7ff;text-decoration:underline}.vehiclePhotoNote{font-size:11px;color:var(--muted);margin:3px 0 9px}
+@media(max-width:470px){.vehiclePicture.heroPhoto{width:112px;height:91px;flex-basis:112px}.vehiclePicture.garagePhoto{height:160px}}
+</style>
+</head>
+<body>
+<div class="app">
+<header class="top"><div class="brand"><span class="brandmark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 16.3a8 8 0 1 1 15 0"/><path d="m12 14 5-5"/><path d="M7 18h10"/></svg></span><div>PitNudge<span class="subtitle">YOUR RIDE. RIGHT ON TIME.</span></div></div><select id="currentVehicle" class="vehicleSelect" aria-label="Selected vehicle"></select></header>
+<div class="layout"><aside class="sidebar" id="sideNav"></aside><main class="main" id="content">
+<section class="panel" style="margin-top:18px;max-width:660px">
+<div class="eyebrow" style="margin-bottom:10px">IMPORTANT: OPEN IN CHROME</div>
+<h1 style="font-size:27px;line-height:1.2;margin:0 0 10px">Google Drive is only previewing this app.</h1>
+<p class="introText">The Drive preview may block PitNudge's interactive features. To use the vehicle picker and dashboard, download this HTML file, then open your downloaded copy in Chrome.</p>
+<div class="note" style="margin:18px 0"><strong>On Android:</strong><ol style="padding-left:20px;line-height:1.85;margin-bottom:0"><li>Go back to the PitNudge folder in Google Drive.</li><li>Tap the three dots beside this HTML file (not inside the preview).</li><li>Choose <strong>Download</strong>.</li><li>Open the <strong>Files</strong> app &gt; <strong>Downloads</strong>.</li><li>Tap the PitNudge HTML file and choose <strong>Chrome</strong> to open it.</li></ol></div>
+<p class="small muted">When running correctly, this message disappears and you will see “Take care of your ride” with an Add my vehicle button.</p>
+</section></main></div><nav class="bottom" id="bottomNav" aria-label="Main navigation"></nav></div>
+<dialog id="modal"><div class="dialogHead"><h2 id="modalTitle">Details</h2><button type="button" class="xbutton" id="closeModal" aria-label="Close">×</button></div><div class="dialogContent" id="modalContent"></div></dialog><div id="toast" class="toast" role="status" aria-live="polite"></div>
+<script>
+'use strict';
+const STORE='pitnudge_prototype_v1';
+const DEFAULTS={oil:{name:'Oil & filter change',miles:5000,months:6,icon:'droplet'},rotation:{name:'Tire rotation',miles:6000,months:6,icon:'rotate'},brakes:{name:'Brake inspection',miles:12000,months:12,icon:'shield'},filter:{name:'Engine air filter',miles:12000,months:12,icon:'wind'},fluids:{name:'Fluid inspection',miles:10000,months:12,icon:'wrench'},battery:{name:'Battery inspection',miles:12000,months:12,icon:'zap'}};
+const ICONS={home:'<path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"/>',car:'<path d="m5 17-1 3H2v-7l2-6a2 2 0 0 1 2-1h12a2 2 0 0 1 2 1l2 6v7h-2l-1-3"/><path d="M2 13h20M5 17h14"/><circle cx="6" cy="16" r="1"/><circle cx="18" cy="16" r="1"/>',drive:'<path d="M4 17a8 8 0 1 1 16 0"/><path d="m12 16 5-6M8 20h8"/>',wrench:'<path d="M14.7 6.3a5 5 0 0 0-6.4 6.4L3 18a2 2 0 0 0 3 3l5.3-5.3a5 5 0 0 0 6.4-6.4L15 12l-3-3z"/>',map:'<path d="m3 6 6-3 6 3 6-3v15l-6 3-6-3-6 3zM9 3v15M15 6v15"/>',more:'<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>',plus:'<path d="M12 5v14M5 12h14"/>',droplet:'<path d="M12 2c-3.5 4.9-7 8.7-7 12a7 7 0 0 0 14 0c0-3.3-3.5-7.1-7-12z"/>',rotate:'<path d="M20 11a8 8 0 1 0-2.2 6M20 4v7h-7"/>',shield:'<path d="m12 22 8-5V5l-8-3-8 3v12zM9 12l2 2 4-4"/>',wind:'<path d="M3 8h12a3 3 0 1 0-3-3M2 12h18a2 2 0 1 1-2 2M3 16h9a3 3 0 1 1-3 3"/>',zap:'<path d="m13 2-9 12h7l-1 8 10-12h-7z"/>',calendar:'<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4M17 3v4M3 10h18"/>',receipt:'<path d="M4 3h16v18l-4-2-4 2-4-2-4 2zM8 8h8M8 12h8"/>',file:'<path d="M6 2h8l5 5v15H6zM14 2v6h5M9 13h7M9 17h7"/>',arrow:'<path d="M5 12h14m-7-7 7 7-7 7"/>',pin:'<path d="M20 10c0 5-8 12-8 12S4 15 4 10a8 8 0 1 1 16 0z"/><circle cx="12" cy="10" r="2.5"/>',bell:'<path d="M18 8a6 6 0 0 0-12 0c0 8-3 8-3 10h18c0-2-3-2-3-10M10 21h4"/>',check:'<path d="m4 12 5 5L20 6"/>',book:'<path d="M12 7c-3-3-7-3-10-2v15c3-1 7-1 10 2 3-3 7-3 10-2V5c-3-1-7-1-10 2zM12 7v15"/>',edit:'<path d="m4 20 4-.8L20 7l-3-3L5 16z"/>',trash:'<path d="M4 7h16M9 7V4h6v3M6 7l1 14h10l1-14M10 11v6M14 11v6"/>',download:'<path d="M12 3v13m-5-5 5 5 5-5M4 17v4h16v-4"/>',clock:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>'};
+function icon(name, size=20){return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name]||ICONS.wrench}</svg>`}
+const blank=()=>({vehicles:[],selected:null,records:[],trips:[],autoDetect:false,saveRouteMaps:false});
+let db;try{db=JSON.parse(localStorage.getItem(STORE))||blank()}catch{db=blank()}if(!db||!Array.isArray(db.vehicles))db=blank();
+db.records=Array.isArray(db.records)?db.records:[];db.trips=Array.isArray(db.trips)?db.trips:[];db.saveRouteMaps=!!db.saveRouteMaps;
+let page='home', moreTab='account', watchId=null, activeTrip=null, lastFix=null, movingSamples=0, lastMovingAt=0, movementEstimate=0, toastTimer=null, monitorError=false;
+let nativeMileageState={running:false,recording:false,mode:'manual',miles:0,events:[]}, nativeMileageStarting=false;
+let nativeRouteSyncAt=0, nativeAutoResumeAt=0, nativeAutoResumePending=false;
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const money=n=>Number(n||0).toLocaleString('en-US',{style:'currency',currency:'USD'});
+const miles=n=>Number(n||0).toLocaleString('en-US',{maximumFractionDigits:1});
+const today=()=>{const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`};
+const humanDate=s=>{if(!s)return 'Unknown date';let d=new Date(s+'T12:00:00');return Number.isNaN(+d)?esc(s):d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})};
+const id=()=>`${Date.now()}_${Math.random().toString(36).slice(2,8)}`;
+const vehicle=()=>db.vehicles.find(v=>v.id===db.selected)||null;
+const vehicleName=v=>v?`${v.year} ${v.make} ${v.model}`:'Add a vehicle';
+// User photos override model photos. Photos come only from Commons files with reusable image licenses; otherwise use offline vehicle illustrations.
+const BODY_TRUCK=/\b(tacoma|tundra|silverado|sierra|f-?150|f-?250|f-?350|super duty|colorado|canyon|frontier|titan|ridgeline|ranger|maverick|gladiator|1500|2500|3500|pickup|r1t|cybertruck|avalanche|el camino|s10|s-10)\b/i;
+const BODY_SUV=/\b(rav4|highlander|4runner|sequoia|land cruiser|cr-v|pilot|hr-v|passport|rogue|pathfinder|armada|murano|kicks|explorer|expedition|escape|bronco|edge|ecosport|blazer|equinox|traverse|tahoe|suburban|trailblazer|terrain|acadia|yukon|durango|grand cherokee|cherokee|wrangler|compass|renegade|wagoneer|cx-3|cx-5|cx-7|cx-9|cx-30|cx-50|cx-70|cx-90|outback|forester|crosstrek|ascent|telluride|sportage|sorento|seltos|palisade|santa fe|tucson|kona|model x|model y|r1s|q3|q5|q7|q8|x1|x2|x3|x4|x5|x6|x7|gle|glc|gls|g-class|xc40|xc60|xc90|rx 350|nx 350|gx 550|lx 600|escalade|xt4|xt5|xt6|lyriq|atlas|tiguan|taos|id.4|id. buzz)\b/i;
+const BODY_VAN=/\b(sienna|odyssey|pacifica|grand caravan|caravan|town & country|transit|sprinter|promaster|express|savanna|nv200|nv2500|minivan|van|voyager|carnival|sedona)\b/i;
+const BODY_COUPE=/\b(mustang|camaro|corvette|challenger|charger|supra|gr86|brz|miata|mx-5|370z|350z|z|911|boxster|cayman|civic type r|gt-r|r8|tt)\b/i;
+function vehicleBodyType(v){const model=String(v?.model||'');const make=String(v?.make||'');if(BODY_TRUCK.test(model)||/^(Ram|Freightliner|Kenworth|Mack)$/i.test(make))return 'Pickup';if(BODY_VAN.test(model))return 'Van';if(BODY_SUV.test(model)||make==='Jeep'&&!/gladiator/i.test(model))return 'SUV';if(BODY_COUPE.test(model))return 'Sport';return 'Sedan';}
+function illustrationSvg(v){
+ const kind=vehicleBodyType(v);
+ const shapes={
+  Pickup:{shell:'M84 120 L113 90 Q122 78 139 78 H236 Q253 78 263 97 L272 118 H310 Q324 118 331 131 L343 157 V175 H73 V148 Q73 129 84 120Z',glass:'M133 88 H225 Q237 88 244 100 L253 119 H106 L122 96 Q126 88 133 88Z'},
+  SUV:{shell:'M76 126 L100 86 Q113 69 132 69 H268 Q286 70 296 90 L315 129 H330 Q344 134 346 149 V174 H68 V150 Q68 136 76 126Z',glass:'M132 81 H258 Q272 81 280 96 L296 127 H104 L118 94 Q124 82 132 81Z'},
+  Van:{shell:'M70 119 L88 76 Q98 61 116 61 H269 Q293 63 304 84 L321 128 H338 V174 H65 V143 Q65 128 70 119Z',glass:'M118 76 H259 Q277 76 286 93 L303 129 H96 L107 92 Q111 77 118 76Z'},
+  Sport:{shell:'M74 143 L112 119 L142 99 Q157 90 185 90 H247 Q272 90 292 113 L312 137 H327 Q344 141 347 153 V175 H62 V154 Q62 148 74 143Z',glass:'M173 101 H245 Q258 102 276 122 L290 139 H118 L154 107 Q163 101 173 101Z'},
+  Sedan:{shell:'M72 137 L114 116 L145 88 Q160 75 181 75 H247 Q270 76 285 94 L311 135 H333 Q346 141 349 156 V175 H62 V152 Q62 142 72 137Z',glass:'M175 87 H242 Q257 88 268 103 L289 134 H120 L153 96 Q163 87 175 87Z'}
+ };
+ const a=shapes[kind]; const tint=({'Pickup':'#ec6465','SUV':'#7c9bb7','Van':'#8fb5aa','Sport':'#f1b970','Sedan':'#c5d2df'})[kind];
+ return `<svg class="vehicleIllustration" role="img" aria-label="${kind} illustration" viewBox="0 0 410 225" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet"><defs><linearGradient id="pncarpaint" x1="0" y1="0" x2="0" y2="1"><stop stop-color="${tint}"/><stop offset="1" stop-color="#48586a"/></linearGradient></defs><path d="M0 181 Q205 163 410 181 V225 H0Z" fill="#111b28"/><ellipse cx="205" cy="178" rx="149" ry="14" fill="#030813" opacity=".5"/><path d="${a.shell}" fill="url(#pncarpaint)" stroke="#d7e2ef" stroke-width="2.6"/><path d="${a.glass}" fill="#122234" stroke="#9aaabc" stroke-width="2"/><path d="M206 85 V134" stroke="#70879d" stroke-width="2" opacity=".65"/><path d="M81 151 H114 M299 151 H328" stroke="#fff1c8" stroke-linecap="round" stroke-width="7" opacity=".85"/><path d="M91 174 H324" stroke="#26384a" stroke-width="4"/><circle cx="127" cy="173" r="24" fill="#0c1520" stroke="#95a5b5" stroke-width="5"/><circle cx="283" cy="173" r="24" fill="#0c1520" stroke="#95a5b5" stroke-width="5"/><circle cx="127" cy="173" r="9" fill="#b8c5d2"/><circle cx="283" cy="173" r="9" fill="#b8c5d2"/></svg>`;
+}
+// Licensed model photos: Wikimedia Commons metadata, not scraped manufacturer images.
+// Remote lookup is optional. When offline or license cannot be checked, render the bundled illustration.
+const PHOTO_CACHE_KEY='pitnudge_verified_model_photos_v1';
+const PHOTO_CACHE_TTL=14*24*60*60*1000;
+const PHOTO_NEGATIVE_TTL=12*60*60*1000;
+let modelPhotoCache={};
+try{modelPhotoCache=JSON.parse(localStorage.getItem(PHOTO_CACHE_KEY)||'{}')||{}}catch{modelPhotoCache={}}
+const modelPhotoRequests=new Map();
+const normalizePhotoWords=s=>String(s||'').normalize('NFKD').replace(/[^a-zA-Z0-9]+/g,' ').trim().toLowerCase();
+const modelPhotoKey=v=>[v?.year,normalizePhotoWords(v?.make),normalizePhotoWords(v?.model)].join('|');
+function photoUrlIsSafe(url,host){try{const u=ne

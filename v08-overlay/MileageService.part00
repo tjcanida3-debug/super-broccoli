@@ -1,0 +1,237 @@
+package com.pitnudge.app;
+
+import android.Manifest;
+import android.app.Notification;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
+import android.app.Service;
+import android.content.Context;
+import android.content.Intent;
+import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
+import android.content.pm.ServiceInfo;
+import android.location.Location;
+import android.location.LocationListener;
+import android.location.LocationManager;
+import android.os.Build;
+import android.os.IBinder;
+import android.os.Looper;
+import android.os.SystemClock;
+import android.util.Log;
+
+import org.json.JSONArray;
+import org.json.JSONObject;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.Locale;
+import java.util.TimeZone;
+import java.util.UUID;
+
+/**
+ * Opt-in foreground location tracking. A notification remains visible while
+ * tracking. Route points are saved only when the user enables optional
+ * route maps. Coordinates stay in the trip log and optional cloud backup;
+ * the native service does not upload them independently.
+ * The WebView explicitly acknowledges finished trips after saving them into
+ * its existing local/cloud garage, avoiding loss on Activity destruction.
+ */
+public class MileageService extends Service implements LocationListener {
+    private static final String TAG = "PitNudgeMileage";
+    private static final String CHANNEL = "pitnudge_mileage_channel";
+    private static final int NOTIFICATION_ID = 1917;
+    private static final String PREF = "pitnudge_native_mileage";
+    private static final String KEY = "tracking_state";
+    private static final String EVENTS = "completed_trips";
+    static final String START = "com.pitnudge.app.START_MILEAGE";
+    static final String STOP = "com.pitnudge.app.STOP_MILEAGE";
+    static final String FINISH = "com.pitnudge.app.FINISH_CURRENT_TRIP";
+    static final String CANCEL = "com.pitnudge.app.CANCEL_MILEAGE";
+    static final String CATEGORY = "com.pitnudge.app.SET_CATEGORY";
+    static final String ROUTE = "com.pitnudge.app.SET_ROUTE";
+    private static final long IDLE_AUTO_FINISH_MS = 180_000L;
+
+    private LocationManager locationManager;
+    private Location lastLocation;
+    private boolean running, recording, saveRoute;
+    private JSONArray route = new JSONArray();
+    private String mode = "manual", vehicleId = "", category = "personal", startedAt = "";
+    private double miles;
+    private int movingHits;
+    private long idleSince, lastNotificationAt, lastMotionAt;
+    private final android.os.Handler checkHandler = new android.os.Handler(Looper.getMainLooper());
+    private final Runnable idleCheck = new Runnable() {
+        @Override public void run() {
+            if (running && "auto".equals(mode) && recording && lastMotionAt > 0
+                    && SystemClock.elapsedRealtime()-lastMotionAt > IDLE_AUTO_FINISH_MS) {
+                finishCurrent(true);
+                persist();
+                maybeNotify();
+            }
+            checkHandler.postDelayed(this,30_000L);
+        }
+    };
+    private String message = "Waiting for GPS";
+    private float accuracy = -1f;
+    private long lastFixAt;
+
+    public static String snapshot(Context context) {
+        SharedPreferences p = context.getSharedPreferences(PREF, Context.MODE_PRIVATE);
+        try {
+            JSONObject s = new JSONObject(p.getString(KEY, "{}"));
+            s.put("events", new JSONArray(p.getString(EVENTS, "[]")));
+            s.put("stopRequested", p.getBoolean("user_requested_stop", false));
+            return s.toString();
+        } catch (Exception ignored) {
+            return "{\"running\":false,\"events\":[]}";
+        }
+    }
+
+    public static void acknowledge(Context context, String eventId) {
+        SharedPreferences p = context.getSharedPreferences(PREF, Context.MODE_PRIVATE);
+        try {
+            JSONArray old = new JSONArray(p.getString(EVENTS, "[]"));
+            JSONArray kept = new JSONArray();
+            for (int i = 0; i < old.length(); i++) {
+                JSONObject e = old.optJSONObject(i);
+                if (e != null && !eventId.equals(e.optString("id"))) kept.put(e);
+            }
+            p.edit().putString(EVENTS, kept.toString()).commit();
+        } catch (Exception e) { Log.e(TAG, "Could not acknowledge completed trip", e); }
+    }
+
+    @Override public void onCreate() {
+        super.onCreate();
+        locationManager = (LocationManager) getSystemService(LOCATION_SERVICE);
+        NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
+        nm.createNotificationChannel(new NotificationChannel(CHANNEL, "PitNudge trip mileage", NotificationManager.IMPORTANCE_LOW));
+        checkHandler.postDelayed(idleCheck,30_000L);
+    }
+
+    @Override public int onStartCommand(Intent intent, int flags, int startId) {
+        String action = intent == null ? START : intent.getAction();
+        if (STOP.equals(action) || CANCEL.equals(action)) {
+            // Honor explicit stops (including the notification action) instead of
+            // silently re-enabling monitoring next time the app is opened.
+            getSharedPreferences(PREF,MODE_PRIVATE).edit().putBoolean("user_requested_stop",true).apply();
+            if (running && recording && !CANCEL.equals(action)) finishCurrent(false);
+            shutdown();
+            return START_NOT_STICKY;
+        }
+        if (FINISH.equals(action)) {
+            if (running && recording) {
+                // Save this drive but keep the opt-in auto monitor active for the next one.
+                finishCurrent("auto".equals(mode));
+                if ("auto".equals(mode)) {
+                    message="Drive saved · watching for next drive";
+                    persist();
+                    ((NotificationManager)getSystemService(NOTIFICATION_SERVICE))
+                        .notify(NOTIFICATION_ID, notification());
+                } else shutdown();
+            }
+            return running ? START_STICKY : START_NOT_STICKY;
+        }
+        if (CATEGORY.equals(action)) {
+            if (running) {
+                category = "business".equals(intent.getStringExtra("category")) ? "business" : "personal";
+                persist();
+            }
+            return START_STICKY;
+        }
+        if (ROUTE.equals(action)) {
+            if (running) {
+                saveRoute = intent != null && intent.getBooleanExtra("saveRoute", false);
+                if (!saveRoute) route = new JSONArray();
+                // If mapping gets enabled mid-trip, begin with the latest valid fix.
+                else if (lastLocation != null) sampleRoute(lastLocation);
+                message=saveRoute ? "GPS connected · route recording ON" : "GPS connected · route recording OFF";
+                persist();
+                ((NotificationManager)getSystemService(NOTIFICATION_SERVICE))
+                    .notify(NOTIFICATION_ID, notification());
+            }
+            return START_STICKY;
+        }
+        if (running) return START_STICKY;
+        if (intent != null && intent.hasExtra("vehicleId")) {
+            getSharedPreferences(PREF,MODE_PRIVATE).edit().putBoolean("user_requested_stop",false).apply();
+            vehicleId = intent.getStringExtra("vehicleId");
+            mode = "auto".equals(intent.getStringExtra("mode")) ? "auto" : "manual";
+            category = "business".equals(intent.getStringExtra("category")) ? "business" : "personal";
+            miles = 0d;
+            route = new JSONArray();
+            saveRoute = intent.getBooleanExtra("saveRoute",false);
+            recording = !"auto".equals(mode);
+            startedAt = recording ? nowIso() : "";
+            lastLocation = null;
+            movingHits = 0;
+            idleSince = 0;
+        } else {
+            // Foreground service is allowed to resume after a system restart,
+            // but never begin a new unrequested location session.
+            try {
+                JSONObject prior = new JSONObject(getSharedPreferences(PREF,MODE_PRIVATE).getString(KEY,"{}"));
+                if (!prior.optBoolean("running")) { stopSelf(); return START_NOT_STICKY; }
+                vehicleId=prior.optString("vehicleId");
+                mode=prior.optString("mode","manual");
+                category=prior.optString("category","personal");
+                recording=prior.optBoolean("recording");
+                miles=prior.optDouble("miles",0);
+                saveRoute=prior.optBoolean("saveRoute",false);
+                route=prior.optJSONArray("route")==null?new JSONArray():prior.getJSONArray("route");
+                startedAt=prior.optString("startedAt", "");
+                // Do not bridge an unknown gap after the process is restarted.
+                lastLocation=null;
+                lastMotionAt=SystemClock.elapsedRealtime();
+            } catch (Exception e) { stopSelf(); return START_NOT_STICKY; }
+        }
+        if (vehicleId == null || vehicleId.trim().isEmpty()) { stopSelf(); return START_NOT_STICKY; }
+        running = true;
+        message = "Waiting for an accurate GPS fix";
+        persist();
+        try {
+            Notification n = notification();
+            if (Build.VERSION.SDK_INT >= 29)
+                startForeground(NOTIFICATION_ID, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION);
+            else startForeground(NOTIFICATION_ID, n);
+            if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED
+                    && checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED)
+                throw new SecurityException("Location permission missing");
+            boolean registered = false;
+            if (locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER)) {
+                locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 2000L, 3f, this, Looper.getMainLooper());
+                registered=true;
+            }
+            if (locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
+                locationManager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 4000L, 8f, this, Looper.getMainLooper());
+                registered=true;
+            }
+            if (!registered) throw new IllegalStateException("Turn on Location in Android settings");
+        } catch (Exception e) {
+            Log.e(TAG, "Unable to start location updates",e);
+            message = "Could not start GPS: " + e.getMessage();
+            shutdown();
+            return START_NOT_STICKY;
+        }
+        return START_STICKY;
+    }
+
+    // Privacy: samples are added only to an explicitly enabled trip route.
+    // Five decimal places are approximately metre resolution. Decimation
+    // keeps saved trips bounded even if monitoring stays on for hours.
+    private void sampleRoute(Location loc) {
+        if (!saveRoute || !recording || loc == null) return;
+        try {
+            double lat = Math.round(loc.getLatitude()*100000d)/100000d;
+            double lon = Math.round(loc.getLongitude()*100000d)/100000d;
+            if (route.length()>0) {
+                JSONArray last=route.getJSONArray(route.length()-1);
+                double dlat=Math.abs(lat-last.getDouble(0));
+                double dlon=Math.abs(lon-last.getDouble(1));
+                if (dlat<0.00007d && dlon<0.00007d) return;
+            }
+            route.put(new JSONArray().put(lat).put(lon));
+            if (route.length()>240) {
+                JSONArray reduced = new JSONArray();
+                for (int i=0; i<route.length(); i+=2) reduced.put(route.get(i));
+                // Keep most recent position, used for trip endpoint.
+                if 

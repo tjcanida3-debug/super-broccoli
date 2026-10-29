@@ -1,0 +1,66 @@
+${n}" ${(old?.year||thisYear)===n?'selected':''}>${n}</option>`).join('');
+ const body=`<form id="vehicleEntryForm"><div class="formGrid">
+  ${selectField('Year','year','yearChoice',yearOptions)}
+  ${selectField('Make','make','makeChoice','<option value="">Loading makes…</option>')}
+  <label class="field wide" id="otherMakeBox" hidden>Type make (only if not listed)<input name="otherMake" maxlength="45" placeholder="Vehicle make" /></label>
+  ${selectField('Model','model','modelChoice','<option value="">Choose a make first…</option>')}
+  <label class="field wide" id="otherModelBox" hidden>Type model (only if not listed)<input name="otherModel" maxlength="45" placeholder="Vehicle model" /></label>
+  ${field('Current odometer (miles)','mileage',true,'number',old?.mileage??'','min="0" step="0.1"')}
+  <div class="field wide"><span>Vehicle picture</span><div id="carPhotoPreview">${vehiclePicture(old||{year:thisYear,make:'',model:''},'form')}</div><div class="vehiclePhotoNote">PitNudge looks for a reusable model photo online. Photos may show a nearby model year; if none is available, a vehicle illustration appears. You can also choose your own photo.</div></div>
+  <label class="field wide">Use a photo of my car (optional)<input name="vehiclePhoto" type="file" accept="image/*" /></label>
+  <label class="toggle wide"><input name="defaultPicture" type="checkbox" /> Use the default picture instead</label>
+  </div><p class="small muted" id="catalogStatus" role="status" aria-live="polite">Pick year, make and model from the lists.</p>
+  <p class="small muted">Not seeing your vehicle? Pick <strong>Other / not listed</strong>. Your odometer is your starting point; new trips add estimated miles.</p>
+  <button class="button space" type="submit">${editing?'Save vehicle':'Add to garage'}</button></form>`;
+ showModal(editing?'Edit vehicle':'Add a vehicle',body,async (f,form)=>{
+   let year=Number(f.get('year')),mileage=Number(f.get('mileage'));
+   let make=String(f.get('make'))===OTHER_CHOICE?String(f.get('otherMake')||'').trim():String(f.get('make')||'').trim();
+   let model=String(f.get('model'))===OTHER_CHOICE?String(f.get('otherModel')||'').trim():String(f.get('model')||'').trim();
+   if(!make||!model||!Number.isFinite(mileage)||mileage<0||year<1950||year>new Date().getFullYear()+2){notify('Please choose a valid vehicle and mileage.');return false}
+   let photo=old?.photo||'';
+   if(form.elements.namedItem('defaultPicture').checked)photo='';
+   const picked=form.elements.namedItem('vehiclePhoto').files[0];
+   if(picked&&!form.elements.namedItem('defaultPicture').checked)photo=await photoData(picked);
+   if(editing){
+     const before={...old};Object.assign(old,{year,make,model,mileage,photo});
+     if(!save()){Object.assign(old,before);return false}
+   }else{
+     let v={id:id(),year,make,model,mileage,photo,schedules:{}};db.vehicles.push(v);db.selected=v.id;
+     if(!save()){db.vehicles.pop();db.selected=db.vehicles[0]?.id||null;return false}
+   }
+   notify(editing?'Vehicle updated.':'Vehicle added!')
+ });
+ installVehicleDropdowns(old);
+ setTimeout(hydrateVehiclePhotos,200);
+ const form=$('vehicleEntryForm'),preview=$('carPhotoPreview');
+ if(form&&preview){
+   const drawPreview=(img)=>{
+     const sel=(name)=>form.elements.namedItem(name);
+     const model=sel('model').value===OTHER_CHOICE?sel('otherModel').value:sel('model').value;
+     const make=sel('make').value===OTHER_CHOICE?sel('otherMake').value:sel('make').value;
+     const draft={year:Number(sel('year').value),make,model,photo:img!==undefined?img:(sel('defaultPicture').checked?'':old?.photo||'')};
+     preview.innerHTML=vehiclePicture(draft,'form');setTimeout(hydrateVehiclePhotos,0);
+   };
+   form.addEventListener('change',async event=>{
+     if(event.target.name==='vehiclePhoto'){
+       const chosen=event.target.files[0];
+       if(chosen){form.elements.namedItem('defaultPicture').checked=false;
+         try{drawPreview(await photoData(chosen))}catch(e){notify(e.message);event.target.value='';drawPreview()}
+       }else drawPreview();
+     }else if(event.target.name==='defaultPicture'){
+       if(event.target.checked)form.elements.namedItem('vehiclePhoto').value='';drawPreview();
+     }else if(['year','make','model','otherMake','otherModel'].includes(event.target.name)){
+       drawPreview();
+       if(['make','year'].includes(event.target.name))setTimeout(()=>{if(form.isConnected)drawPreview()},250);
+     }
+   });
+ }
+
+}
+function serviceDialog(chosen){let v=vehicle();if(!v){notify('Add a vehicle first.');go('more');return}showModal('Record completed service',`<form><div class="formGrid"><label class="field wide">Service performed<select name="service" required>${Object.entries(DEFAULTS).map(([key,obj])=>`<option value="${key}" ${key===chosen?'selected':''}>${esc(obj.name)}</option>`).join('')}<option value="other" ${chosen==='other'?'selected':''}>Other vehicle service</option></select></label>${field('Service date','date',true,'date',today())}${field('Mileage when serviced','mileage',true,'number',v.mileage,'min="0" step="0.1"')}${field('Total paid ($)','amount',false,'number','0','min="0" step="0.01"')}<label class="field">Receipt photo (optional)<input type="file" name="photo" accept="image/*" capture="environment" /></label><label class="field wide">Notes / shop name<textarea name="note" maxlength="400" placeholder="Where you went or what you replaced"></textarea></label></div><p class="small muted">Photos are compressed and stored locally. For old services, enter the actual service mileage and date.</p><button class="button space" type="submit">Save service & receipt</button></form>`,async (f,form)=>{let img=await photoData(form.querySelector('[name=photo]').files[0]);db.records.push({id:id(),vehicleId:v.id,kind:'service',service:f.get('service'),date:String(f.get('date')),mileage:Number(f.get('mileage')),amount:Number(f.get('amount')||0),note:String(f.get('note')||''),photo:img});if(!save()){db.records.pop();return false}notify('Service saved. Maintenance reminders updated.')})}
+function intervalDialog(key){let v=vehicle(),s=serviceInfo(v,key);showModal('Customize '+s.name,`<form><div class="formGrid">${field('Every ___ miles','miles',true,'number',s.miles,'min="100" max="150000" step="100"')}${field('Or every ___ months','months',true,'number',s.months,'min="1" max="120" step="1"')}</div><p class="small muted">The next reminder is based on whichever interval comes first. Check your owner's manual for vehicle-specific intervals.</p><button type="submit" class="button space">Save schedule</button></form>`,f=>{v.schedules=v.schedules||{};v.schedules[key]={miles:Number(f.get('miles')),months:Number(f.get('months'))};save();notify('Schedule updated.')})}
+function manualTripDialog(){let v=vehicle();if(!v){notify('Add a vehicle first.');return}showModal('Add a trip',`<form><div class="formGrid">${field('Date','date',true,'date',today())}${field('Distance (miles)','miles',true,'number','','min="0.1" max="10000" step="0.1"')}<label class="field wide">Trip purpose<select name="type"><option value="personal">Personal</option><option value="business">Business (work / deliveries)</option></select></label><label class="field wide">Purpose or notes<textarea name="note" maxlength="400" placeholder="Example: Delivery shift, errands, commute"></textarea></label></div><p class="small muted">This trip will also add miles to the selected vehicle's estimated odometer. Don't add trips already included in your odometer reading.</p><button class="button space" type="submit">Save trip</button></form>`,f=>{let m=Number(f.get('miles'));if(!Number.isFinite(m)||m<=0){notify('Enter a valid distance.');return false}db.trips.push({id:id(),vehicleId:v.id,date:String(f.get('date')),miles:m,type:String(f.get('type')),note:String(f.get('note')||''),source:'manual'});v.mileage=Number((Number(v.mileage)+m).toFixed(1));save();notify('Trip added and odometer estimate updated.')})}
+function editTripDialog(tripId){let t=db.trips.find(x=>x.id===tripId);if(!t)return;showModal('Edit recorded trip',`<form><div class="formGrid">${field('Trip date','date',true,'date',t.date)}${field('Distance (miles)','miles',true,'number',t.miles,'min="0.1" max="10000" step="0.1"')}<label class="field wide">Trip category<select name="type"><option value="personal" ${t.type==='personal'?'selected':''}>Personal</option><option value="business" ${t.type==='business'?'selected':''}>Business</option></select></label><label class="field wide">Business purpose / notes<textarea name="note" maxlength="400" placeholder="Example: Delivery shift, client visit">${esc(t.note||'')}</textarea></label></div><p class="small muted">Editing the distance also adjusts the vehicle’s estimated odometer by the difference.</p><button class="button space" type="submit">Update trip</button></form>`,f=>{const revised=Number(f.get('miles'));if(!Number.isFinite(revised)||revised<=0)return false;let v=db.vehicles.find(v=>v.id===t.vehicleId);if(v)v.mileage=Math.max(0,Math.round((Number(v.mileage)+revised-Number(t.miles))*10)/10);Object.assign(t,{date:String(f.get('date')),miles:revised,type:String(f.get('type')),note:String(f.get('note')||'')});save();notify('Trip updated.')})}
+function expenseDialog(){let v=vehicle();if(!v){notify('Add a vehicle first.');return}showModal('Add vehicle expense',`<form><div class="formGrid"><label class="field wide">Expense type<select name="category"><option>Fuel</option><option>Parking</option><option>Tolls</option><option>Car wash</option><option>Parts / supplies</option><option>Insurance</option><option>Other</option></select></label>${field('Date','date',true,'date',today())}${field('Cost ($)','amount',true,'number','','min="0" step="0.01"')}${field('Odometer (miles)','mileage',true,'number',v.mileage,'min="0" step="0.1"')}<label class="field">Receipt photo<input name="photo" type="file" accept="image/*" capture="environment"/></label><label class="field wide">Notes<textarea name="note" maxlength="400"></textarea></label></div><p class="small muted">Recording a vehicle cost does not mean the cost qualifies as a tax deduction.</p><button class="button space" type="submit">Save expense</button></form>`,async (f,form)=>{let img=await photoData(form.querySelector('[name=photo]').files[0]);db.records.push({id:id(),vehicleId:v.id,kind:'expense',category:String(f.get('category')),date:String(f.get('date')),mileage:Number(f.get('mileage')),amount:Number(f.get('amount')),note:String(f.get('note')||''),photo:img});if(!save()){db.records.pop();return false}notify('Expense saved.')})}
+async function photoData(file){if(!file)return '';if(!file.type.startsWith('image/'))throw Error('Choose an image file.');if(file.size>20*1024*1024)throw Error('This photo is too large. Use a smaller image.');return new Promise((resolve,reject)=>{let pic=new Image(),url=URL.createObjectURL(file);pic.onload=()=>{try{let max=650,scale=Math.min(1,max/Math.max(pic.width,pic.height)),canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(pic.width*scale));canvas.height=Math.max(1,Math.round(pic.height*scale));canvas.getContext('2d').drawImage(pic,0,0,canvas.width,canvas.height);let data=canvas.toDataURL('image/jpeg',.58);URL.revokeObjectURL(url);resolve(data)}catch(e){reject(e)}};pic.onerror=()=>{URL.revokeObjectURL(url);reject(Error('Photo could not be read.'))};pic.src=url})}
+function download(filename,contents,mime='text/plain;charset=utf-8'){if(window.NativePitNudge&&typeof window.NativePitNudge.saveFile==='function'){window.NativePitNudge.saveFile(filename,contents,mime);notify('Saving '+filename+' to Downloads.');return}let b=new Blob([contents],{type:mime}),url=URL.createObjectURL(b),a=document.createElement('a');a.href=url;a.download=filename;document.body.append(a);a.click();a.remove();se

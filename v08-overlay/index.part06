@@ -1,0 +1,123 @@
+Pathfinder","Quest","Rogue","Rogue Sport","Sentra","Stanza","Titan","Titan XD","Versa","Xterra","Z"],"Oldsmobile":["88","98","Achieva","Alero","Aurora","Bravada","Calais","Ciera","Cutlass","Cutlass Supreme","Delta 88","Intrigue","Silhouette","Toronado"],"Plymouth":["Acclaim","Barracuda","Breeze","Caravelle","Grand Voyager","Horizon","Neon","Prowler","Relient","Sundance","Voyager"],"Polestar":["1","2","3","4"],"Pontiac":["Aztek","Bonneville","Firebird","G3","G5","G6","G8","Grand Am","Grand Prix","GTO","Montana","Solstice","Sunbird","Sunfire","Torrent","Trans Sport","Vibe"],"Porsche":["718 Boxster","718 Cayman","911","924","928","944","968","Boxster","Carrera GT","Cayenne","Cayman","Macan","Panamera","Taycan"],"Ram":["1500","1500 Classic","2500","3500","4500","5500","ProMaster","ProMaster City"],"Rivian":["R1S","R1T","R2","R3"],"Rolls-Royce":["Cullinan","Dawn","Ghost","Phantom","Spectre","Wraith"],"Saab":["9-2X","9-3","9-4X","9-5","9-7X","900","9000"],"Saturn":["Astra","Aura","Ion","L-Series","Outlook","Relay","S-Series","Sky","Vue"],"Scion":["FR-S","iA","iM","iQ","tC","xA","xB","xD"],"Smart":["fortwo","forfour","EQ fortwo"],"Subaru":["Ascent","Baja","BRZ","Crosstrek","Forester","Impreza","Justy","Legacy","Loyale","Outback","Solterra","SVX","Tribeca","WRX","WRX STI","XT"],"Suzuki":["Aerio","Equator","Forenza","Grand Vitara","Kizashi","Reno","Samurai","Sidekick","Swift","SX4","Verona","Vitara","XL-7"],"Tesla":["Cybertruck","Model 3","Model S","Model X","Model Y","Roadster"],"Toyota":["4Runner","86","Avalon","bZ4X","C-HR","Camry","Celica","Corolla","Corolla Cross","Cressida","Crown","Crown Signia","Echo","FJ Cruiser","Grand Highlander","GR Corolla","GR86","Highlander","Land Cruiser","Matrix","Mirai","MR2","Paseo","Pickup","Previa","Prius","Prius c","Prius Prime","RAV4","RAV4 Prime","Sequoia","Sienna","Supra","T100","Tacoma","Tercel","Tundra","Venza","Yaris","Yaris iA"],"Volkswagen":["Arteon","Atlas","Atlas Cross Sport","Beetle","CC","Corrado","Dasher","Eos","e-Golf","Golf","Golf GTI","Golf R","ID.4","ID. Buzz","Jetta","Karmann Ghia","New Beetle","Passat","Phaeton","Rabbit","Routan","Scirocco","Tiguan","Touareg","Vanagon"],"Volvo":["240","740","850","940","960","C30","C40","C70","EX30","EX40","EX90","S40","S60","S70","S80","S90","V40","V50","V60","V70","V90","XC40","XC60","XC70","XC90"],"VinFast":["VF 6","VF 7","VF 8","VF 9"],"Alpina":["B3","B5","B6","B7","XB7"],"Bugatti":["Chiron","Veyron"],"BYD":["Atto 3","Dolphin","Han","Seal","Tang"],"Chery":["Arrizo","Tiggo"],"Cupra":["Born","Formentor","Leon"],"Datsun":["210","280Z","280ZX","510","620","720","B210","Z"],"DeLorean":["DMC-12"],"Great Wall":["Cannon","Haval H6","Ora Funky Cat"],"Holden":["Astra","Barina","Colorado","Commodore","Monaro"],"Hino":["155","195","258","268","338"],"International":["CV Series","DuraStar","Harvester","Loadstar","LT Series","ProStar","Scout","TerraStar","TranStar"],"Ineos":["Grenadier","Quartermaster"],"Lancia":["Delta","Stratos","Ypsilon"],"Mahindra":["Bolero","Scorpio","Thar"],"Maybach":["57","62","S-Class"],"MG":["MG3","MG4","MG5","MG HS","MG ZS","MGB"],"Opel":["Astra","Corsa","Insignia","Mokka","Vectra"],"Peugeot":["208","308","3008","508","5008","Partner"],"Renault":["Clio","Duster","Kangoo","Megane"],"Rover":["25","45","75","Mini"],"SEAT":["Arona","Ateca","Ibiza","Leon"],"Skoda":["Enyaq","Fabia","Karoq","Kodiaq","Octavia","Superb"],"SsangYong":["Korando","Musso","Rexton","Tivoli"],"Tata":["Harrier","Nexon","Tiago"],"Vauxhall":["Astra","Corsa","Insignia","Mokka","Vivaro"],"Willys":["CJ-2A","CJ-3A","Jeep Station Wagon","Pickup"],"Abarth":[],"Acadian":[],"Apollo":[],"Avanti":[],"Borgward":[],"Bricklin":[],"Canoo":[],"Changan":[],"Dacia":[],"DS":[],"Edsel":[],"Freightliner":[],"GAC":[],"Geely":[],"Ginetta":[],"Gordon Murray":[],"Hongqi":[],"Hudson":[],"Hummer EV":[],"IKCO":[],"Kenworth":[],"Koenigsegg":[],"Lada":[],"Leapmotor":[],"Li Auto":[],"Mack":[],"Mercury Marine":[],"Moke":[],"Morgan":[],"Nio":[],"Pagani":[],"Perodua":[],"Pininfarina":[],"Polaris":[],"Proton":[],"Qoros":[],"Rambler":[],"Rimac":[],"Ruf":[],"Shelby":[],"Studebaker":[],"Tatra":[],"Triumph":[],"Wuling":[],"XPeng":[],"Yugo":[],"Zeekr":[]};
+const POPULAR_MAKES=["Chevrolet","Ford","Toyota","Honda","Nissan","Hyundai","Kia","Dodge","Ram","GMC","Jeep","Subaru","BMW","Mercedes-Benz","Volkswagen","Mazda","Lexus","Buick","Cadillac","Chrysler","Mitsubishi","Tesla","Acura","Infiniti","Lincoln","Volvo","Audi","Pontiac","Saturn","Scion","Suzuki","Mini","Land Rover","Porsche","Genesis","Rivian"];
+
+// Offline catalog is always usable; NHTSA extends it where browser access allows.
+const OTHER_CHOICE='__other__';
+const normalizeName=n=>String(n||'').trim().toLocaleLowerCase().replace(/[\s\-_.]+/g,' ');
+const canonicalMake=name=>{
+  const alias={'chevy':'Chevrolet','mercedes':'Mercedes-Benz','mercedes benz':'Mercedes-Benz','vw':'Volkswagen','mini cooper':'Mini','range rover':'Land Rover','dodge ram':'Ram'};
+  const wanted=alias[normalizeName(name)]||name;
+  return Object.keys(OFFLINE_VEHICLES).find(k=>normalizeName(k)===normalizeName(wanted))||String(wanted||'');
+};
+const uniqueNames=arr=>Array.from(new Map(arr.filter(Boolean).map(n=>[normalizeName(n),String(n).trim()])).values()).sort((a,b)=>a.localeCompare(b,undefined,{sensitivity:'base',numeric:true}));
+const vehicleOption=(name,selected)=>`<option value="${esc(name)}" ${name===selected?'selected':''}>${esc(name)}</option>`;
+const selectField=(label,name,id,options)=>`<label class="field">${label}<select name="${name}" id="${id}" required>${options}</select></label>`;
+async function vehicleApi(path,timeout=9000){
+  const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),timeout);
+  try{
+    const res=await fetch('https://vpic.nhtsa.dot.gov/api/vehicles/'+path,{signal:controller.signal});
+    if(!res.ok)throw Error('Vehicle catalog unavailable');const data=await res.json();
+    return Array.isArray(data?.Results)?data.Results:[];
+  }finally{clearTimeout(timer)}
+}
+const makeCache={result:null,loaded:false};
+const modelCache=new Map();
+async function enrichMakes(form){
+  if(makeCache.loaded)return makeCache.result||[];
+  try{
+    const response=await Promise.allSettled([
+      vehicleApi('GetMakesForVehicleType/car?format=json'),
+      vehicleApi('GetMakesForVehicleType/truck?format=json'),
+      vehicleApi('GetMakesForVehicleType/multipurpose%20passenger%20vehicle?format=json')
+    ]);
+    const names=uniqueNames(response.flatMap(r=>r.status==='fulfilled'?r.value.map(x=>x.MakeName||x.Make_Name):[]));
+    if(names.length){makeCache.result=names;makeCache.loaded=true;return names;}
+  }catch(e){}
+  return [];
+}
+function installVehicleDropdowns(old){
+ const form=$('vehicleEntryForm');if(!form)return;
+ const yearEl=form.elements.namedItem('year'),makeEl=form.elements.namedItem('make'),modelEl=form.elements.namedItem('model');
+ const otherMake=form.elements.namedItem('otherMake'),otherModel=form.elements.namedItem('otherModel');
+ const makeBox=$('otherMakeBox'),modelBox=$('otherModelBox'),status=$('catalogStatus');
+ let makeNames=uniqueNames(Object.keys(OFFLINE_VEHICLES));
+ let remoteModels=null,lookupCounter=0;
+ const oldMake=canonicalMake(old?.make||''),oldModel=String(old?.model||'');
+ function populateMakes(preferred){
+   const all=uniqueNames([...makeNames,...Object.keys(OFFLINE_VEHICLES)]);
+   let used=new Set();
+   const favorites=POPULAR_MAKES.filter(n=>all.some(x=>normalizeName(x)===normalizeName(n))).map(n=>all.find(x=>normalizeName(x)===normalizeName(n)));
+   favorites.forEach(n=>used.add(normalizeName(n)));
+   const rest=all.filter(n=>!used.has(normalizeName(n)));
+   const existing=all.find(n=>normalizeName(n)===normalizeName(preferred));
+   makeEl.innerHTML='<option value="">Choose make…</option>'+
+      `<optgroup label="Common makes">${favorites.map(n=>vehicleOption(n,existing)).join('')}</optgroup>`+
+      `<optgroup label="More makes (A–Z)">${rest.map(n=>vehicleOption(n,existing)).join('')}</optgroup>`+
+      `<option value="${OTHER_CHOICE}">Other / not listed…</option>`;
+   if(preferred&&!existing){makeEl.value=OTHER_CHOICE;otherMake.value=preferred;}
+   else makeEl.value=existing||'';
+   toggleCustom();
+ }
+ function toggleCustom(){
+   const customMake=makeEl.value===OTHER_CHOICE;
+   makeBox.hidden=!customMake;otherMake.required=customMake;
+   const customModel=modelEl.value===OTHER_CHOICE;
+   modelBox.hidden=!customModel;otherModel.required=customModel;
+ }
+ function populateModels(preferred='',options=null){
+   const name=makeEl.value===OTHER_CHOICE?otherMake.value.trim():makeEl.value;
+   const offline=OFFLINE_VEHICLES[canonicalMake(name)]||[];
+   const models=uniqueNames([...(options||[]),...offline]);
+   const existing=models.find(x=>normalizeName(x)===normalizeName(preferred));
+   modelEl.innerHTML='<option value="">Choose model…</option>'+models.map(n=>vehicleOption(n,existing)).join('')+`<option value="${OTHER_CHOICE}">Other / not listed…</option>`;
+   if(preferred===OTHER_CHOICE){modelEl.value=OTHER_CHOICE;}
+   else if(preferred&&!existing){modelEl.value=OTHER_CHOICE;otherModel.value=preferred;}
+   else modelEl.value=existing||'';
+   toggleCustom();
+ }
+ async function lookupModels(preferred=''){
+   const ticket=++lookupCounter;
+   const chosenMake=makeEl.value===OTHER_CHOICE?otherMake.value.trim():makeEl.value;
+   const yr=Number(yearEl.value);
+   if(!chosenMake){populateModels('');status.textContent='Choose a make to see models.';return;}
+   populateModels(preferred);
+   if(!navigator.onLine){status.textContent='Showing built-in models (offline).';return;}
+   status.textContent='Checking for more vehicle models…';
+   const key=normalizeName(chosenMake)+'-'+yr;
+   try{
+     let result=modelCache.get(key);
+     if(!result){
+       const path=yr>1995?`GetModelsForMakeYear/make/${encodeURIComponent(chosenMake)}/modelyear/${yr}?format=json`:`GetModelsForMake/${encodeURIComponent(chosenMake)}?format=json`;
+       result=uniqueNames((await vehicleApi(path)).map(x=>x.Model_Name||x.ModelName));
+       if(result.length)modelCache.set(key,result);
+     }
+     if(ticket!==lookupCounter||!form.isConnected)return;
+     const current=modelEl.value===OTHER_CHOICE?OTHER_CHOICE:modelEl.value;
+     populateModels(current||preferred,result);
+     status.textContent=result.length?`Showing built-in choices and additional NHTSA models for ${yr}.`:'Showing built-in models. Choose Other if yours is missing.';
+   }catch(e){
+     if(ticket!==lookupCounter||!form.isConnected)return;
+     status.textContent='Showing built-in models. Choose Other if yours is missing.';
+   }
+ }
+ populateMakes(oldMake);
+ populateModels(oldModel);
+ makeEl.addEventListener('change',()=>{otherMake.value='';otherModel.value='';populateModels('');lookupModels();});
+ modelEl.addEventListener('change',()=>{otherModel.value='';toggleCustom();});
+ yearEl.addEventListener('change',()=>{lookupModels(modelEl.value===OTHER_CHOICE?otherModel.value:modelEl.value);});
+ otherMake.addEventListener('change',()=>lookupModels(modelEl.value===OTHER_CHOICE?OTHER_CHOICE:modelEl.value));
+ status.textContent='Built-in cars and trucks work offline. More options load when available.';
+ // Additional online makes, including commercial and older makes.
+ enrichMakes(form).then(found=>{
+   if(!found.length||!form.isConnected)return;
+   const choice=makeEl.value===OTHER_CHOICE?otherMake.value:makeEl.value;
+   makeNames=uniqueNames([...makeNames,...found]);populateMakes(choice);
+   if(!choice)status.textContent='More makes loaded. Choose a make and model.';
+ });
+ if(oldMake)lookupModels(oldModel);
+}
+
+function vehicleDialog(editId){
+ let old=db.vehicles.find(v=>v.id===editId),editing=!!old;
+ const thisYear=new Date().getFullYear();
+ const yearOptions=Array.from({length:thisYear+2-1950+1},(_,i)=>thisYear+2-i).map(n=>`<option value="

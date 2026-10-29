@@ -58,6 +58,19 @@ jobs:
           grep -q 'setSmallIcon(R.drawable.ic_tracking_status)' app/src/main/java/com/pitnudge/app/MileageService.java
           grep -q 'versionCode 10' app/build.gradle
           echo "Applied v0.7 optional route maps and GPS samples"
+      - name: Apply PitNudge v0.8 continuous auto-detect and route fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat v08-overlay/index.part?? > app/src/main/assets/index.html
+          cat v08-overlay/MainActivity.part?? > app/src/main/java/com/pitnudge/app/MainActivity.java
+          cat v08-overlay/MileageService.part?? > app/src/main/java/com/pitnudge/app/MileageService.java
+          cat v08-overlay/app-build.gradle.part?? > app/build.gradle
+          grep -q 'finishMileageTrip' app/src/main/java/com/pitnudge/app/MainActivity.java
+          grep -q 'FINISH_CURRENT_TRIP' app/src/main/java/com/pitnudge/app/MileageService.java
+          grep -q 'versionCode 11' app/build.gradle
+          grep -q 'setSmallIcon(R.drawable.ic_tracking_status)' app/src/main/java/com/pitnudge/app/MileageService.java
+          echo 'Applied v0.8 recurring drive detection and map sampling fixes'
       - uses: actions/setup-java@v4
         with:
           distribution: temurin

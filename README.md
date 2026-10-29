@@ -1,13 +1,20 @@
-# PitNudge Android
+# PitNudge Android — v0.8 beta
 
-**v0.7.0 Test Build — GPS Trip Route Maps**
+Vehicle maintenance, mileage, receipts, Google sign-in and cloud sync with opt-in GPS trip tracking.
 
-Adds an optional **Save trip route maps** setting to the existing GPS mileage tracker. After enabled, newly tracked trips store a bounded, simplified array of GPS coordinates (up to 240 points per trip). The route can be viewed from **Trips → View map**, showing the path over an OpenStreetMap street map (when online), plus a local route-shape preview. Live trips have a **View live map** button. Older trips from before this release have only mileage and cannot be reconstructed.
+## v0.8: Automatic tracking across drives
+- The **Keep auto-detect ON between drives** setting is an explicit opt-in.
+- When turned on in a visible Activity, Android uses a foreground location service with an ongoing notification. A drive finishes automatically after about 3 minutes stationary. **The monitor stays on** after the trip for the next drive, until the user explicitly turns it off.
+- The **Finish current drive** action saves an ongoing trip while retaining the auto-monitoring service. The separate **Turn off auto-detect** action stops it.
+- If Android kills the service, opening the app tries to resume the previously opted-in monitoring. If the user explicitly stops it via the notification, the app honors that choice and does not auto-restart.
+- This is not guaranteed 24/7 passive background detection. Reboots, force-stops, battery optimization, lost permissions and OS background restrictions may interrupt monitoring. A persistent foreground GPS monitor may use substantial battery. The app does not silently start background location tracking without a foreground user action.
 
-**Privacy:** Route capture is OFF by default. It runs only during an opted-in active mileage service session; toggling the route option while tracking takes effect on the current trip. If cloud sync is active, trip routes are included in the encrypted-transport Firebase account backup along with other trip records, subject to the current size limits. Opening a street map makes tile requests to OpenStreetMap servers, which can see the map areas viewed. Users can remove the saved route for any single trip without changing its mileage. For a commercial/public launch, use a dedicated tile provider and review OSM tile rules and privacy policy.
+## v0.8: Fix missing trip maps
+- The Android service captures valid GPS route points independently of the mileage speed threshold, only when **Save trip route maps** is enabled.
+- The app reconciles its saved route preference with the native Android service and shows **Map saving ON/OFF** plus the number of GPS points captured, so users can verify it is actually recording coordinates before driving.
+- **View map** appears for a saved trip only when at least two GPS points were captured. Trips saved before route capture was active cannot be retroactively mapped.
+- Routes can be removed separately from mileage; if cloud sync is enabled, route coordinates in trip logs may be included in cloud backups. Map tiles require internet access.
+- GPS distance remains an estimate; compare it with your actual vehicle odometer.
 
-**Mileage verification:** GPS estimates do not equal dashboard odometer readings. The Edit button lets users correct recorded trip miles and adjusts estimated mileage by the difference. GPS outliers are rejected, and route sampling is capped. While tracking with screen locked, Android shows a foreground notification using the custom tracking icon.
-
-The workflow rebuilds the baseline source archive, then applies the Firebase/photo (v0.3), native mileage (v0.5), tracking notification icon (v0.6), and optional route-map (v0.7) overlays. Original PitNudge launcher artwork is unchanged. A Google sign-in test has succeeded previously; Android GPS route capture still requires a real device test. Keep backups before changing test builds.
-
-Leaflet 1.9.4 (BSD 2-Clause license) is loaded from unpkg when a user opens a map; OpenStreetMap tiles require © OpenStreetMap contributors attribution. The app shows a local sketch if the street layer cannot load.
+## Build
+GitHub Actions extracts the Android base source ZIP and applies source overlays (v0.3 Firebase/photo, v0.5 mileage, v0.6 status icon, v0.7 route maps, and v0.8 fixes), then builds a debug APK. Launcher icon is unchanged. GitHub Actions build success does not establish GPS behavior on a specific phone; test on an Android device.

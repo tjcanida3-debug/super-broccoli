@@ -1,0 +1,142 @@
+private void emitAuthState(){emitJs("onAuthState", authState());}
+    private void emitError(String message){emitJs("onError", message);}
+    private void signInWithApple(){
+        if(!cloudConfigured){emitError("Google and Apple accounts have not been configured.");return;}
+        OAuthProvider.Builder builder=OAuthProvider.newBuilder("apple.com");
+        builder.setScopes(java.util.Arrays.asList("email", "name"));
+        if(auth.getPendingAuthResult()!=null){
+            auth.getPendingAuthResult().addOnSuccessListener(result -> emitAuthState())
+                .addOnFailureListener(e -> emitError("Apple sign-in failed: "+e.getMessage()));
+        }else{
+            auth.startActivityForSignInWithProvider(this,builder.build())
+                .addOnSuccessListener(result -> emitAuthState())
+                .addOnFailureListener(e -> emitError("Apple sign-in failed: "+e.getMessage()));
+        }
+    }
+    private void signInWithGoogle(){
+        if(!cloudConfigured){emitError("Cloud sign-in is not configured yet.");return;}
+        int clientId=getResources().getIdentifier("default_web_client_id","string",getPackageName());
+        if(clientId==0){emitError("Google sign-in needs a Firebase web client ID.");return;}
+        GetSignInWithGoogleOption option=new GetSignInWithGoogleOption.Builder(getString(clientId)).build();
+        GetCredentialRequest request=new GetCredentialRequest.Builder().addCredentialOption(option).build();
+        CredentialManager.create(this).getCredentialAsync(this,request,null,getMainExecutor(),
+            new CredentialManagerCallback<GetCredentialResponse,GetCredentialException>(){
+                @Override public void onResult(GetCredentialResponse response){
+                    if(!(response.getCredential() instanceof CustomCredential)){
+                        emitError("No supported Google account was selected.");return;
+                    }
+                    CustomCredential credential=(CustomCredential)response.getCredential();
+                    if(!GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL.equals(credential.getType())){
+                        emitError("Google credential type was not supported.");return;
+                    }
+                    try{
+                        String token=GoogleIdTokenCredential.createFrom(credential.getData()).getIdToken();
+                        auth.signInWithCredential(GoogleAuthProvider.getCredential(token,null))
+                            .addOnSuccessListener(result -> emitAuthState())
+                            .addOnFailureListener(e -> emitError("Google sign-in failed: "+e.getMessage()));
+                    }catch(Exception ex){emitError("Google token could not be read.");}
+                }
+                @Override public void onError(GetCredentialException error){
+                    android.util.Log.w("PitNudge", "Google sign-in request failed: "+error.getType(), error);
+                    if(error instanceof androidx.credentials.exceptions.NoCredentialException) {
+                        emitError("Google account picker couldn't find an available account. Check your phone has a Google account in Settings, and update Google Play services.");
+                    } else {
+                        emitError("Google sign-in couldn't finish: "+error.getMessage());
+                    }
+                }
+            });
+    }
+    private void fetchCloud(){
+        if(cloud==null||auth==null||auth.getCurrentUser()==null)return;
+        cloud.collection("users").document(auth.getCurrentUser().getUid()).collection("data").document("garage")
+        .get().addOnSuccessListener(doc -> {
+            JSONObject o=new JSONObject();try{
+                o.put("found",doc.exists()&&doc.contains("json"));
+                if(doc.exists()&&doc.contains("json"))o.put("json", doc.getString("json"));
+                if(doc.exists()&&doc.getTimestamp("updatedAt")!=null)o.put("updatedAt", doc.getTimestamp("updatedAt").toDate().getTime());
+            }catch(Exception e){}emitJs("onCloudResult",o.toString());
+        }).addOnFailureListener(e -> {
+            JSONObject o=new JSONObject();try{o.put("error",e.getMessage());}catch(Exception ex){}
+            emitJs("onCloudResult",o.toString());
+        });
+    }
+    private void saveCloud(String json){
+        if(auth==null||cloud==null||auth.getCurrentUser()==null){emitError("Sign in first.");return;}
+        if(json==null||json.length()>700000){emitError("Cloud backup is too large; export a local backup.");return;}
+        pendingJson=json;
+        if(pendingUpload!=null)uploadHandler.removeCallbacks(pendingUpload);
+        pendingUpload=()->{
+            String writeJson=pendingJson;
+            String uid=auth.getCurrentUser()==null?null:auth.getCurrentUser().getUid();
+            if(uid==null)return;
+            Map<String,Object> data=new HashMap<>();data.put("json",writeJson);data.put("updatedAt",FieldValue.serverTimestamp());
+            cloud.collection("users").document(uid).collection("data").document("garage").set(data)
+                .addOnSuccessListener(v->{JSONObject o=new JSONObject();try{o.put("ok",true);}catch(Exception e){}emitJs("onCloudWrite",o.toString());})
+                .addOnFailureListener(e->{JSONObject o=new JSONObject();try{o.put("ok",false);o.put("error",e.getMessage());}catch(Exception x){}emitJs("onCloudWrite",o.toString());});
+        };
+        uploadHandler.postDelayed(pendingUpload,1500);
+    }
+    private class AndroidBridge {
+        @JavascriptInterface public String getAuthState(){return authState();}
+        @JavascriptInterface public void signInGoogle(){runOnUiThread(()->signInWithGoogle());}
+        @JavascriptInterface public void signInApple(){runOnUiThread(()->signInWithApple());}
+        @JavascriptInterface public void signOut(){runOnUiThread(()->{
+            if(pendingUpload!=null)uploadHandler.removeCallbacks(pendingUpload);
+            if(auth!=null)auth.signOut();emitAuthState();
+        });}
+        @JavascriptInterface public String getMileageState(){return MileageService.snapshot(MainActivity.this);}
+        @JavascriptInterface public void startMileage(String vehicleId, String mode, String category, boolean saveRoute){beginMileage(vehicleId, mode, category, saveRoute);}
+        @JavascriptInterface public void stopMileage(){mileageCommand(MileageService.STOP, null);}
+        @JavascriptInterface public void discardMileage(){mileageCommand(MileageService.CANCEL, null);}
+        @JavascriptInterface public void setMileageCategory(String category){mileageCommand(MileageService.CATEGORY, category);}
+        @JavascriptInterface public void setMileageRoute(boolean enabled){runOnUiThread(()->{
+            Intent i=new Intent(MainActivity.this,MileageService.class).setAction(MileageService.ROUTE);
+            i.putExtra("saveRoute",enabled);
+            try{startService(i);}catch(Exception e){android.util.Log.w("PitNudge","Could not change route preference",e);}
+        });}
+        @JavascriptInterface public void ackMileageEvent(String eventId){MileageService.acknowledge(MainActivity.this,eventId);}
+        @JavascriptInterface public void fetchCloud(){runOnUiThread(()->MainActivity.this.fetchCloud());}
+        @JavascriptInterface public void saveCloud(String json){runOnUiThread(()->MainActivity.this.saveCloud(json));}
+
+        @JavascriptInterface public void saveFile(String fileName, String contents, String mime) {
+            String safeName = fileName.replaceAll("[^a-zA-Z0-9._-]", "_");
+            if (safeName.isEmpty()) safeName = "pitnudge-export.txt";
+            try {
+                OutputStream os;
+                if (Build.VERSION.SDK_INT >= 29) {
+                    ContentValues vals = new ContentValues();
+                    vals.put(MediaStore.Downloads.DISPLAY_NAME, safeName);
+                    vals.put(MediaStore.Downloads.MIME_TYPE, mime == null ? "text/plain" : mime);
+                    vals.put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/PitNudge");
+                    Uri dest = getContentResolver().insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, vals);
+                    if (dest == null) throw new Exception("Could not create download");
+                    os = getContentResolver().openOutputStream(dest);
+                } else {
+                    File folder = getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS);
+                    if (folder == null) throw new Exception("No storage available");
+                    os = new FileOutputStream(new File(folder, safeName));
+                }
+                if (os == null) throw new Exception("Could not open download");
+                try (OutputStream stream = os) {
+                    stream.write(contents.getBytes(StandardCharsets.UTF_8));
+                }
+                runOnUiThread(() -> Toast.makeText(MainActivity.this,
+                        "Saved export to PitNudge downloads", Toast.LENGTH_LONG).show());
+            } catch (Exception e) {
+                runOnUiThread(() -> Toast.makeText(MainActivity.this,
+                        "Could not save export: " + e.getMessage(), Toast.LENGTH_LONG).show());
+            }
+        }
+    }
+
+    @Override public void onBackPressed() {
+        // HTML tabs are a single local page; don't silently close the app mid-session.
+        if (webView.canGoBack()) webView.goBack();
+        else super.onBackPressed();
+    }
+
+    @Override protected void onDestroy() {
+        if (webView != null) webView.destroy();
+        super.onDestroy();
+    }
+}

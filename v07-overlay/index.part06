@@ -1,0 +1,141 @@
+nst oldMake=canonicalMake(old?.make||''),oldModel=String(old?.model||'');
+ function populateMakes(preferred){
+   const all=uniqueNames([...makeNames,...Object.keys(OFFLINE_VEHICLES)]);
+   let used=new Set();
+   const favorites=POPULAR_MAKES.filter(n=>all.some(x=>normalizeName(x)===normalizeName(n))).map(n=>all.find(x=>normalizeName(x)===normalizeName(n)));
+   favorites.forEach(n=>used.add(normalizeName(n)));
+   const rest=all.filter(n=>!used.has(normalizeName(n)));
+   const existing=all.find(n=>normalizeName(n)===normalizeName(preferred));
+   makeEl.innerHTML='<option value="">Choose make…</option>'+
+      `<optgroup label="Common makes">${favorites.map(n=>vehicleOption(n,existing)).join('')}</optgroup>`+
+      `<optgroup label="More makes (A–Z)">${rest.map(n=>vehicleOption(n,existing)).join('')}</optgroup>`+
+      `<option value="${OTHER_CHOICE}">Other / not listed…</option>`;
+   if(preferred&&!existing){makeEl.value=OTHER_CHOICE;otherMake.value=preferred;}
+   else makeEl.value=existing||'';
+   toggleCustom();
+ }
+ function toggleCustom(){
+   const customMake=makeEl.value===OTHER_CHOICE;
+   makeBox.hidden=!customMake;otherMake.required=customMake;
+   const customModel=modelEl.value===OTHER_CHOICE;
+   modelBox.hidden=!customModel;otherModel.required=customModel;
+ }
+ function populateModels(preferred='',options=null){
+   const name=makeEl.value===OTHER_CHOICE?otherMake.value.trim():makeEl.value;
+   const offline=OFFLINE_VEHICLES[canonicalMake(name)]||[];
+   const models=uniqueNames([...(options||[]),...offline]);
+   const existing=models.find(x=>normalizeName(x)===normalizeName(preferred));
+   modelEl.innerHTML='<option value="">Choose model…</option>'+models.map(n=>vehicleOption(n,existing)).join('')+`<option value="${OTHER_CHOICE}">Other / not listed…</option>`;
+   if(preferred===OTHER_CHOICE){modelEl.value=OTHER_CHOICE;}
+   else if(preferred&&!existing){modelEl.value=OTHER_CHOICE;otherModel.value=preferred;}
+   else modelEl.value=existing||'';
+   toggleCustom();
+ }
+ async function lookupModels(preferred=''){
+   const ticket=++lookupCounter;
+   const chosenMake=makeEl.value===OTHER_CHOICE?otherMake.value.trim():makeEl.value;
+   const yr=Number(yearEl.value);
+   if(!chosenMake){populateModels('');status.textContent='Choose a make to see models.';return;}
+   populateModels(preferred);
+   if(!navigator.onLine){status.textContent='Showing built-in models (offline).';return;}
+   status.textContent='Checking for more vehicle models…';
+   const key=normalizeName(chosenMake)+'-'+yr;
+   try{
+     let result=modelCache.get(key);
+     if(!result){
+       const path=yr>1995?`GetModelsForMakeYear/make/${encodeURIComponent(chosenMake)}/modelyear/${yr}?format=json`:`GetModelsForMake/${encodeURIComponent(chosenMake)}?format=json`;
+       result=uniqueNames((await vehicleApi(path)).map(x=>x.Model_Name||x.ModelName));
+       if(result.length)modelCache.set(key,result);
+     }
+     if(ticket!==lookupCounter||!form.isConnected)return;
+     const current=modelEl.value===OTHER_CHOICE?OTHER_CHOICE:modelEl.value;
+     populateModels(current||preferred,result);
+     status.textContent=result.length?`Showing built-in choices and additional NHTSA models for ${yr}.`:'Showing built-in models. Choose Other if yours is missing.';
+   }catch(e){
+     if(ticket!==lookupCounter||!form.isConnected)return;
+     status.textContent='Showing built-in models. Choose Other if yours is missing.';
+   }
+ }
+ populateMakes(oldMake);
+ populateModels(oldModel);
+ makeEl.addEventListener('change',()=>{otherMake.value='';otherModel.value='';populateModels('');lookupModels();});
+ modelEl.addEventListener('change',()=>{otherModel.value='';toggleCustom();});
+ yearEl.addEventListener('change',()=>{lookupModels(modelEl.value===OTHER_CHOICE?otherModel.value:modelEl.value);});
+ otherMake.addEventListener('change',()=>lookupModels(modelEl.value===OTHER_CHOICE?OTHER_CHOICE:modelEl.value));
+ status.textContent='Built-in cars and trucks work offline. More options load when available.';
+ // Additional online makes, including commercial and older makes.
+ enrichMakes(form).then(found=>{
+   if(!found.length||!form.isConnected)return;
+   const choice=makeEl.value===OTHER_CHOICE?otherMake.value:makeEl.value;
+   makeNames=uniqueNames([...makeNames,...found]);populateMakes(choice);
+   if(!choice)status.textContent='More makes loaded. Choose a make and model.';
+ });
+ if(oldMake)lookupModels(oldModel);
+}
+
+function vehicleDialog(editId){
+ let old=db.vehicles.find(v=>v.id===editId),editing=!!old;
+ const thisYear=new Date().getFullYear();
+ const yearOptions=Array.from({length:thisYear+2-1950+1},(_,i)=>thisYear+2-i).map(n=>`<option value="${n}" ${(old?.year||thisYear)===n?'selected':''}>${n}</option>`).join('');
+ const body=`<form id="vehicleEntryForm"><div class="formGrid">
+  ${selectField('Year','year','yearChoice',yearOptions)}
+  ${selectField('Make','make','makeChoice','<option value="">Loading makes…</option>')}
+  <label class="field wide" id="otherMakeBox" hidden>Type make (only if not listed)<input name="otherMake" maxlength="45" placeholder="Vehicle make" /></label>
+  ${selectField('Model','model','modelChoice','<option value="">Choose a make first…</option>')}
+  <label class="field wide" id="otherModelBox" hidden>Type model (only if not listed)<input name="otherModel" maxlength="45" placeholder="Vehicle model" /></label>
+  ${field('Current odometer (miles)','mileage',true,'number',old?.mileage??'','min="0" step="0.1"')}
+  <div class="field wide"><span>Vehicle picture</span><div id="carPhotoPreview">${vehiclePicture(old||{year:thisYear,make:'',model:''},'form')}</div><div class="vehiclePhotoNote">PitNudge looks for a reusable model photo online. Photos may show a nearby model year; if none is available, a vehicle illustration appears. You can also choose your own photo.</div></div>
+  <label class="field wide">Use a photo of my car (optional)<input name="vehiclePhoto" type="file" accept="image/*" /></label>
+  <label class="toggle wide"><input name="defaultPicture" type="checkbox" /> Use the default picture instead</label>
+  </div><p class="small muted" id="catalogStatus" role="status" aria-live="polite">Pick year, make and model from the lists.</p>
+  <p class="small muted">Not seeing your vehicle? Pick <strong>Other / not listed</strong>. Your odometer is your starting point; new trips add estimated miles.</p>
+  <button class="button space" type="submit">${editing?'Save vehicle':'Add to garage'}</button></form>`;
+ showModal(editing?'Edit vehicle':'Add a vehicle',body,async (f,form)=>{
+   let year=Number(f.get('year')),mileage=Number(f.get('mileage'));
+   let make=String(f.get('make'))===OTHER_CHOICE?String(f.get('otherMake')||'').trim():String(f.get('make')||'').trim();
+   let model=String(f.get('model'))===OTHER_CHOICE?String(f.get('otherModel')||'').trim():String(f.get('model')||'').trim();
+   if(!make||!model||!Number.isFinite(mileage)||mileage<0||year<1950||year>new Date().getFullYear()+2){notify('Please choose a valid vehicle and mileage.');return false}
+   let photo=old?.photo||'';
+   if(form.elements.namedItem('defaultPicture').checked)photo='';
+   const picked=form.elements.namedItem('vehiclePhoto').files[0];
+   if(picked&&!form.elements.namedItem('defaultPicture').checked)photo=await photoData(picked);
+   if(editing){
+     const before={...old};Object.assign(old,{year,make,model,mileage,photo});
+     if(!save()){Object.assign(old,before);return false}
+   }else{
+     let v={id:id(),year,make,model,mileage,photo,schedules:{}};db.vehicles.push(v);db.selected=v.id;
+     if(!save()){db.vehicles.pop();db.selected=db.vehicles[0]?.id||null;return false}
+   }
+   notify(editing?'Vehicle updated.':'Vehicle added!')
+ });
+ installVehicleDropdowns(old);
+ setTimeout(hydrateVehiclePhotos,200);
+ const form=$('vehicleEntryForm'),preview=$('carPhotoPreview');
+ if(form&&preview){
+   const drawPreview=(img)=>{
+     const sel=(name)=>form.elements.namedItem(name);
+     const model=sel('model').value===OTHER_CHOICE?sel('otherModel').value:sel('model').value;
+     const make=sel('make').value===OTHER_CHOICE?sel('otherMake').value:sel('make').value;
+     const draft={year:Number(sel('year').value),make,model,photo:img!==undefined?img:(sel('defaultPicture').checked?'':old?.photo||'')};
+     preview.innerHTML=vehiclePicture(draft,'form');setTimeout(hydrateVehiclePhotos,0);
+   };
+   form.addEventListener('change',async event=>{
+     if(event.target.name==='vehiclePhoto'){
+       const chosen=event.target.files[0];
+       if(chosen){form.elements.namedItem('defaultPicture').checked=false;
+         try{drawPreview(await photoData(chosen))}catch(e){notify(e.message);event.target.value='';drawPreview()}
+       }else drawPreview();
+     }else if(event.target.name==='defaultPicture'){
+       if(event.target.checked)form.elements.namedItem('vehiclePhoto').value='';drawPreview();
+     }else if(['year','make','model','otherMake','otherModel'].includes(event.target.name)){
+       drawPreview();
+       if(['make','year'].includes(event.target.name))setTimeout(()=>{if(form.isConnected)drawPreview()},250);
+     }
+   });
+ }
+
+}
+function serviceDialog(chosen){let v=vehicle();if(!v){notify('Add a vehicle first.');go('more');return}showModal('Record completed service',`<form><div class="formGrid"><label class="field wide">Service performed<select name="service" required>${Object.entries(DEFAULTS).map(([key,obj])=>`<option value="${key}" ${key===chosen?'selected':''}>${esc(obj.name)}</option>`).join('')}<option value="other" ${chosen==='other'?'selected':''}>Other vehicle service</option></select></label>${field('Service date','date',true,'date',today())}${field('Mileage when serviced','mileage',true,'number',v.mileage,'min="0" step="0.1"')}${field('Total paid ($)','amount',false,'number','0','min="0" step="0.01"')}<label class="field">Receipt photo (optional)<input type="file" name="photo" accept="image/*" capture="environment" /></label><label class="field wide">Notes / shop name<textarea name="note" maxlength="400" placeholder="Where you went or what you replaced"></textarea></label></div><p class="small muted">Photos are compressed and stored locally. For old services, enter the actual service mileage and date.</p><button class="button space" type="submit">Save service & receipt</button></form>`,async (f,form)=>{let img=await photoData(form.querySelector('[name=photo]').files[0]);db.records.push({id:id(),vehicleId:v.id,kind:'service',service:f.get('service'),date:String(f.get('date')),mileage:Number(f.get('mileage')),amount:Number(f.get('amount')||0),note:String(f.get('note')||''),photo:img});if(!save()){db.records.pop();return false}notify('Service saved. Maintenance reminders updated.')})}
+function intervalDialog(key){let v=vehicle(),s=serviceInfo(v,key);showModal('Customize '+s.name,`<form><div class="formGrid">${field('Every ___ miles','miles',true,'number',s.miles,'min="100" max="150000" step="100"')}${field('Or every ___ months','months',true,'number',s.months,'min="1" max="120" step="1"')}</div><p class="small muted">The next reminder is based on whichever interval comes first. Check your owner's manual for vehicle-specific intervals.</p><button type="submit" class="button space">Save schedule</button></form>`,f=>{v.schedules=v.schedules||{};v.schedules[key]={miles:Number(f.get('miles')),months:Number(f.get('months'))};save();notify('Schedule updated.')})}
+function manualTripDialog(){let v=vehicle();if(!v){notify('Add a vehicle first.');return}showModal('Add a trip',`<form><div class="formGrid">${field('Date','date',true,'date',today())}${field('Distance (miles)','miles',true,'number','','min="0.1" max="10000" step="0.1"')}<label class="field wide">Trip purpose<select name="type"><option value="personal">Personal</option><option value="business">Business (work / deliveries)</option></select></label><label class="field wide">Purpose or notes<textarea name="note" maxlength="400" placeholder="Example: Delivery shift, errands, commute"></textarea></label></div><p class="small muted">This trip will also add miles to the selected vehicle's estimated odometer. Don't add trips already included in your odometer reading.</p><button class="button space" type="submit">Save trip</button></form>`,f=>{let m=Number(f.get('miles'));if(!Number.isFinite(m)||m<=0){notify('Enter a valid distance.');return false}db.trips.push({id:id(),vehicleId:v.id,date:String(f.get('date')),miles:m,type:String(f.get('type')),note:String(f.get('note')||''),source:'manual'});v.mileage=Number((Number(v.mileage)+m).toFixed(1));save();notify('Trip added and odometer estimate updated.')})}
+function editTripDialog(tripId){let t=db.trips.find(x=>x.id===tripId);if(!t)return;showModal('Edit recorded trip',`<form><div class="formGrid">${field('Trip date','date',true,'date',t.date)}${field('Distan

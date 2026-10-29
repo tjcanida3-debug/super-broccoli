@@ -1,0 +1,5 @@
+NativeMileage,3000);window.addEventListener('focus',refreshNativeMileage);document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshNativeMileage()});}
+if(window.NativePitNudge?.getAuthState){window.PitNudgeAccount.onAuthState(window.NativePitNudge.getAuthState());}
+</script>
+</body>
+</html>

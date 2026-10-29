@@ -46,6 +46,18 @@ jobs:
           grep -q 'setSmallIcon(R.drawable.ic_tracking_status)' app/src/main/java/com/pitnudge/app/MileageService.java
           test -s app/src/main/res/drawable-nodpi/ic_tracking_status.png
           echo "PitNudge tracking notification icon installed"
+      - name: Apply PitNudge v0.7 trip route maps
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat v07-overlay/index.part?? > app/src/main/assets/index.html
+          cat v07-overlay/MainActivity.part?? > app/src/main/java/com/pitnudge/app/MainActivity.java
+          cat v07-overlay/MileageService.part?? > app/src/main/java/com/pitnudge/app/MileageService.java
+          cat v07-overlay/app-build.gradle.part?? > app/build.gradle
+          grep -q 'saveRouteMaps' app/src/main/assets/index.html
+          grep -q 'setSmallIcon(R.drawable.ic_tracking_status)' app/src/main/java/com/pitnudge/app/MileageService.java
+          grep -q 'versionCode 10' app/build.gradle
+          echo "Applied v0.7 optional route maps and GPS samples"
       - uses: actions/setup-java@v4
         with:
           distribution: temurin

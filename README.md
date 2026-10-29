@@ -1,11 +1,13 @@
 # PitNudge Android
 
-**v0.5 — GPS Mileage Tracking Test Build**
+**v0.7.0 Test Build — GPS Trip Route Maps**
 
-The Android app supports opted-in **manual GPS trips and drive auto-detection**, including while the screen is locked, through an Android foreground location service with a visible notification. To begin monitoring, open PitNudge and tap **Trips → Start GPS trip** or switch on **Auto-detect driving**. Automatic detection is not enabled around the clock: you must turn it on before a drive. Auto-detected trips end after ~3 minutes stationary. Manual trips end using **Finish trip** or the tracking notification.
+Adds an optional **Save trip route maps** setting to the existing GPS mileage tracker. After enabled, newly tracked trips store a bounded, simplified array of GPS coordinates (up to 240 points per trip). The route can be viewed from **Trips → View map**, showing the path over an OpenStreetMap street map (when online), plus a local route-shape preview. Live trips have a **View live map** button. Older trips from before this release have only mileage and cannot be reconstructed.
 
-The Android service stores estimated distance and trip metadata locally and queues completed trips until the WebView imports them. It does not store raw routes. Completed trips update the selected car's **estimated** odometer once and can sync through Firebase if the user has enabled it. GPS cannot read the real vehicle odometer, and accuracy depends on signal and location permissions. Back up garage data before replacing debug APKs.
+**Privacy:** Route capture is OFF by default. It runs only during an opted-in active mileage service session; toggling the route option while tracking takes effect on the current trip. If cloud sync is active, trip routes are included in the encrypted-transport Firebase account backup along with other trip records, subject to the current size limits. Opening a street map makes tile requests to OpenStreetMap servers, which can see the map areas viewed. Users can remove the saved route for any single trip without changing its mileage. For a commercial/public launch, use a dedicated tile provider and review OSM tile rules and privacy policy.
 
-This public repository retains the earlier baseline archive, the v0.3 vehicle-photo and configured Firebase overlay, and the v0.5 GPS-mileage overlay. GitHub Actions reconstructs the sources and builds a debug APK. The test signing identity is preserved using Actions cache when available.
+**Mileage verification:** GPS estimates do not equal dashboard odometer readings. The Edit button lets users correct recorded trip miles and adjusts estimated mileage by the difference. GPS outliers are rejected, and route sampling is capped. While tracking with screen locked, Android shows a foreground notification using the custom tracking icon.
 
-Photo licensing and attribution still apply. Apple sign-in, 24/7 passive driving detection, and production release signing are not complete.
+The workflow rebuilds the baseline source archive, then applies the Firebase/photo (v0.3), native mileage (v0.5), tracking notification icon (v0.6), and optional route-map (v0.7) overlays. Original PitNudge launcher artwork is unchanged. A Google sign-in test has succeeded previously; Android GPS route capture still requires a real device test. Keep backups before changing test builds.
+
+Leaflet 1.9.4 (BSD 2-Clause license) is loaded from unpkg when a user opens a map; OpenStreetMap tiles require © OpenStreetMap contributors attribution. The app shows a local sketch if the street layer cannot load.

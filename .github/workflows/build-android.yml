@@ -22,6 +22,7 @@ jobs:
           cp v03-overlay/MainActivity.java app/src/main/java/com/pitnudge/app/MainActivity.java
           cp v03-overlay/app-build.gradle app/build.gradle
           cp v03-overlay/root-build.gradle build.gradle
+          cp v03-overlay/google-services.json app/google-services.json
           echo "Applied v0.3 source overlay to Android project"
       - uses: actions/setup-java@v4
         with:
@@ -42,7 +43,7 @@ jobs:
         with:
           gradle-version: '8.9'
       - name: Build installable debug APK
-        run: gradle --no-daemon --stacktrace :app:assembleDebug
+        run: gradle --no-daemon --stacktrace :app:signingReport :app:assembleDebug
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:

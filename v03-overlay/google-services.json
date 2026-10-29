@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "318046989481",
+    "project_id": "pitnudge",
+    "storage_bucket": "pitnudge.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:318046989481:android:676b7fcedf761e8adb8db8",
+        "android_client_info": {
+          "package_name": "com.pitnudge.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAjYn4su4kIWnwOJNpuFt0RjyrDMXJogNk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

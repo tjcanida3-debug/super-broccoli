@@ -34,6 +34,18 @@ jobs:
           cat v05-overlay/manifest.b64.part?? | base64 -d > app/src/main/AndroidManifest.xml
           cat v05-overlay/gradle.b64.part?? | base64 -d > app/build.gradle
           echo 'Applied native GPS mileage update'
+      - name: Install PitNudge tracking status icon (v0.6)
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p app/src/main/res/drawable-nodpi
+          base64 -d v06-overlay/tracking-status-icon.png.b64 > app/src/main/res/drawable-nodpi/ic_tracking_status.png
+          grep -q 'setSmallIcon(android.R.drawable.ic_menu_mylocation)' app/src/main/java/com/pitnudge/app/MileageService.java
+          sed -i 's/setSmallIcon(android.R.drawable.ic_menu_mylocation)/setSmallIcon(R.drawable.ic_tracking_status)/g' app/src/main/java/com/pitnudge/app/MileageService.java
+          sed -i 's/versionCode 8/versionCode 9/g; s/versionName '\''0.5.0'\''/versionName '\''0.6.0'\''/g' app/build.gradle
+          grep -q 'setSmallIcon(R.drawable.ic_tracking_status)' app/src/main/java/com/pitnudge/app/MileageService.java
+          test -s app/src/main/res/drawable-nodpi/ic_tracking_status.png
+          echo "PitNudge tracking notification icon installed"
       - uses: actions/setup-java@v4
         with:
           distribution: temurin

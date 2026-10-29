@@ -1,0 +1,145 @@
+       sampleRoute(loc);
+                startedAt=nowIso();
+                miles=0;
+                idleSince=0;
+                lastMotionAt=now;
+                message="Driving detected · recording miles";
+            } else message="Watching for driving";
+        } else if (recording) {
+            if (mobile) {
+                miles += (meters / 1609.344d);
+                sampleRoute(loc);
+                lastMotionAt=now;
+                idleSince=0;
+                message="Recording GPS distance";
+            } else if ("auto".equals(mode)) {
+                if(idleSince==0)idleSince=now;
+                if (!(btAssisted() && bluetoothConnected) && now-idleSince >= IDLE_AUTO_FINISH_MS) {
+                    finishCurrent(true);
+                    lastLocation=loc;
+                    persist();
+                    maybeNotify();
+                    return;
+                }
+            }
+        }
+        lastLocation=loc;
+        persist();
+        maybeNotify();
+    }
+
+    private void finishCurrent(boolean detected) {
+        if (!recording) return;
+        double distance = Math.round(miles*1000d)/1000d;
+        if (distance >= 0.1d) {
+            SharedPreferences p=getSharedPreferences(PREF, MODE_PRIVATE);
+            try {
+                JSONArray events=new JSONArray(p.getString(EVENTS,"[]"));
+                JSONObject item=new JSONObject();
+                item.put("id",UUID.randomUUID().toString());
+                item.put("vehicleId",vehicleId);
+                item.put("startedAt",startedAt);
+                item.put("category",category);
+                item.put("miles",distance);
+                item.put("automatic",detected);
+                if (saveRoute && route.length()>=2) item.put("route",route);
+                events.put(item);
+                // Cap local queue; trips normally move into the garage on next app open.
+                JSONArray limited=new JSONArray();
+                for(int i=Math.max(0,events.length()-100);i<events.length();i++)limited.put(events.get(i));
+                p.edit().putString(EVENTS,limited.toString()).commit();
+                message=String.format(Locale.US,"%.1f miles ready to save",distance);
+            } catch(Exception e){Log.e(TAG,"Unable to queue completed trip",e);}
+        } else message="Trip too short to save";
+        miles=0;
+        route=new JSONArray();
+        recording=false;
+        startedAt="";
+        movingHits=0;
+        idleSince=0;
+        lastMotionAt=0;
+        lastLocation=null;
+        persist();
+    }
+
+    private void shutdown() {
+        stopGpsUpdates();
+        if(bluetoothListenerRegistered){try{unregisterReceiver(bluetoothReceiver);}catch(Exception ignored){}bluetoothListenerRegistered=false;}
+        running=false;
+        recording=false;
+        route=new JSONArray();
+        miles=0;
+        startedAt="";
+        persist();
+        stopForeground(STOP_FOREGROUND_REMOVE);
+        stopSelf();
+    }
+
+    private void persist() {
+        try {
+            JSONObject s=new JSONObject();
+            s.put("running",running);
+            s.put("mode",mode);
+            s.put("vehicleId",vehicleId);
+            s.put("category",category);
+            s.put("recording",recording);
+            s.put("saveRoute",saveRoute);
+            // In-progress route is available for the live-map preview.
+            if(saveRoute && route.length()>0) s.put("route",route);
+            s.put("miles",Math.round(miles*1000d)/1000d);
+            s.put("startedAt",startedAt);
+            s.put("message",message);
+            s.put("accuracy",accuracy);
+            s.put("lastFixAt",lastFixAt);
+            s.put("bluetoothAssisted",btAssisted());
+            s.put("bluetoothConnected",bluetoothConnected);
+            s.put("bluetoothCarName",btAssisted()?bluetoothName:"");
+            s.put("bluetoothWaiting",btAssisted()&&!bluetoothConnected);
+            getSharedPreferences(PREF,MODE_PRIVATE).edit().putString(KEY,s.toString()).apply();
+        } catch(Exception e){Log.w(TAG,"Unable to store mileage state",e);}
+    }
+
+    private void maybeNotify() {
+        long now=SystemClock.elapsedRealtime();
+        if(now-lastNotificationAt < 12_000) return;
+        lastNotificationAt=now;
+        ((NotificationManager)getSystemService(NOTIFICATION_SERVICE)).notify(NOTIFICATION_ID,notification());
+    }
+
+    private Notification notification() {
+        Intent launch = new Intent(this,MainActivity.class).setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP|Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        PendingIntent open=PendingIntent.getActivity(this,0,launch,PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
+        Intent end=new Intent(this,MileageService.class).setAction(STOP);
+        PendingIntent finish=PendingIntent.getService(this,1,end,PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
+        String title=btAssisted()?"PitNudge · Car Bluetooth mileage" :
+            "auto".equals(mode)? "PitNudge · Auto mileage monitoring" : "PitNudge · GPS trip running";
+        String content=recording?String.format(Locale.US,"%.1f miles · %s",miles,saveRoute?"map ON":"map OFF")
+                :btAssisted() ? (bluetoothConnected?"Car connected · waiting for movement":
+                   bluetoothDisconnectedAt>0?"Car disconnected · finishing trip":"Waiting for "+bluetoothName)
+                :("auto".equals(mode)?"Watching for next drive":"Waiting for vehicle movement")
+                 +(saveRoute?" · map ON":" · map OFF");
+        return new Notification.Builder(this, CHANNEL)
+                .setSmallIcon(R.drawable.ic_tracking_status)
+                .setContentTitle(title)
+                .setContentText(content)
+                .setContentIntent(open)
+                .setOngoing(true)
+                .setOnlyAlertOnce(true)
+                .addAction(android.R.drawable.ic_media_pause,"Finish / stop tracking",finish)
+                .build();
+    }
+
+    private static String nowIso() {
+        SimpleDateFormat fmt=new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US);
+        fmt.setTimeZone(TimeZone.getTimeZone("UTC"));
+        return fmt.format(new Date());
+    }
+
+    @Override public IBinder onBind(Intent intent){return null;}
+    @Override public void onDestroy(){
+        checkHandler.removeCallbacks(idleCheck);
+        stopGpsUpdates();
+        if(bluetoothListenerRegistered){try{unregisterReceiver(bluetoothReceiver);}catch(Exception ignored){}bluetoothListenerRegistered=false;}
+        super.onDestroy();
+    }
+}

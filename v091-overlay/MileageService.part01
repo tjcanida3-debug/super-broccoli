@@ -1,0 +1,221 @@
+ACTION_ACL_CONNECTED);
+            filter.addAction(BluetoothDevice.ACTION_ACL_DISCONNECTED);
+            filter.addAction(BluetoothA2dp.ACTION_CONNECTION_STATE_CHANGED);
+            filter.addAction(BluetoothHeadset.ACTION_CONNECTION_STATE_CHANGED);
+            filter.addAction(BluetoothAdapter.ACTION_STATE_CHANGED);
+            if(Build.VERSION.SDK_INT>=33)registerReceiver(bluetoothReceiver,filter,Context.RECEIVER_EXPORTED);
+            else registerReceiver(bluetoothReceiver,filter);
+            bluetoothListenerRegistered=true;
+            message=bluetoothAdapter.isEnabled()?"Waiting for " + bluetoothName + " Bluetooth":"Turn on Bluetooth to detect " + bluetoothName;
+            if(bluetoothAdapter.isEnabled()) queryBluetoothProfiles();
+        }
+        persist();
+        ((NotificationManager)getSystemService(NOTIFICATION_SERVICE)).notify(NOTIFICATION_ID,notification());
+    }
+    private float accuracy = -1f;
+    private long lastFixAt;
+
+    public static String snapshot(Context context) {
+        SharedPreferences p = context.getSharedPreferences(PREF, Context.MODE_PRIVATE);
+        try {
+            JSONObject s = new JSONObject(p.getString(KEY, "{}"));
+            s.put("events", new JSONArray(p.getString(EVENTS, "[]")));
+            s.put("stopRequested", p.getBoolean("user_requested_stop", false));
+            return s.toString();
+        } catch (Exception ignored) {
+            return "{\"running\":false,\"events\":[]}";
+        }
+    }
+
+    public static void acknowledge(Context context, String eventId) {
+        SharedPreferences p = context.getSharedPreferences(PREF, Context.MODE_PRIVATE);
+        try {
+            JSONArray old = new JSONArray(p.getString(EVENTS, "[]"));
+            JSONArray kept = new JSONArray();
+            for (int i = 0; i < old.length(); i++) {
+                JSONObject e = old.optJSONObject(i);
+                if (e != null && !eventId.equals(e.optString("id"))) kept.put(e);
+            }
+            p.edit().putString(EVENTS, kept.toString()).commit();
+        } catch (Exception e) { Log.e(TAG, "Could not acknowledge completed trip", e); }
+    }
+
+    @Override public void onCreate() {
+        super.onCreate();
+        locationManager = (LocationManager) getSystemService(LOCATION_SERVICE);
+        NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
+        nm.createNotificationChannel(new NotificationChannel(CHANNEL, "PitNudge trip mileage", NotificationManager.IMPORTANCE_LOW));
+        checkHandler.postDelayed(idleCheck,30_000L);
+    }
+
+    @Override public int onStartCommand(Intent intent, int flags, int startId) {
+        String action = intent == null ? START : intent.getAction();
+        if (STOP.equals(action) || CANCEL.equals(action)) {
+            // Honor explicit stops (including the notification action) instead of
+            // silently re-enabling monitoring next time the app is opened.
+            getSharedPreferences(PREF,MODE_PRIVATE).edit().putBoolean("user_requested_stop",true).apply();
+            if (running && recording && !CANCEL.equals(action)) finishCurrent(false);
+            shutdown();
+            return START_NOT_STICKY;
+        }
+        if (FINISH.equals(action)) {
+            if (running && recording) {
+                // Save this drive but keep the opt-in auto monitor active for the next one.
+                finishCurrent("auto".equals(mode));
+                if ("auto".equals(mode)) {
+                    message="Drive saved · watching for next drive";
+                    persist();
+                    ((NotificationManager)getSystemService(NOTIFICATION_SERVICE))
+                        .notify(NOTIFICATION_ID, notification());
+                } else shutdown();
+            }
+            return running ? START_STICKY : START_NOT_STICKY;
+        }
+        if (CATEGORY.equals(action)) {
+            if (running) {
+                category = "business".equals(intent.getStringExtra("category")) ? "business" : "personal";
+                persist();
+            }
+            return START_STICKY;
+        }
+        if (ROUTE.equals(action)) {
+            if (running) {
+                saveRoute = intent != null && intent.getBooleanExtra("saveRoute", false);
+                if (!saveRoute) route = new JSONArray();
+                // If mapping gets enabled mid-trip, begin with the latest valid fix.
+                else if (lastLocation != null) sampleRoute(lastLocation);
+                message=saveRoute ? "GPS connected · route recording ON" : "GPS connected · route recording OFF";
+                persist();
+                ((NotificationManager)getSystemService(NOTIFICATION_SERVICE))
+                    .notify(NOTIFICATION_ID, notification());
+            }
+            return START_STICKY;
+        }
+        if (BLUETOOTH_CONFIG.equals(action)) {
+            readBluetoothChoice();
+            if (running) {
+                if (recording) finishCurrent(false);
+                beginBluetoothWatch();
+            }
+            return START_STICKY;
+        }
+        if (running) return START_STICKY;
+        if (intent != null && intent.hasExtra("vehicleId")) {
+            getSharedPreferences(PREF,MODE_PRIVATE).edit().putBoolean("user_requested_stop",false).apply();
+            vehicleId = intent.getStringExtra("vehicleId");
+            mode = "auto".equals(intent.getStringExtra("mode")) ? "auto" : "manual";
+            category = "business".equals(intent.getStringExtra("category")) ? "business" : "personal";
+            miles = 0d;
+            route = new JSONArray();
+            saveRoute = intent.getBooleanExtra("saveRoute",false);
+            recording = !"auto".equals(mode);
+            startedAt = recording ? nowIso() : "";
+            lastLocation = null;
+            movingHits = 0;
+            idleSince = 0;
+        } else {
+            // Foreground service is allowed to resume after a system restart,
+            // but never begin a new unrequested location session.
+            try {
+                JSONObject prior = new JSONObject(getSharedPreferences(PREF,MODE_PRIVATE).getString(KEY,"{}"));
+                if (!prior.optBoolean("running")) { stopSelf(); return START_NOT_STICKY; }
+                vehicleId=prior.optString("vehicleId");
+                mode=prior.optString("mode","manual");
+                category=prior.optString("category","personal");
+                recording=prior.optBoolean("recording");
+                miles=prior.optDouble("miles",0);
+                saveRoute=prior.optBoolean("saveRoute",false);
+                route=prior.optJSONArray("route")==null?new JSONArray():prior.getJSONArray("route");
+                startedAt=prior.optString("startedAt", "");
+                // Do not bridge an unknown gap after the process is restarted.
+                lastLocation=null;
+                lastMotionAt=SystemClock.elapsedRealtime();
+            } catch (Exception e) { stopSelf(); return START_NOT_STICKY; }
+        }
+        if (vehicleId == null || vehicleId.trim().isEmpty()) { stopSelf(); return START_NOT_STICKY; }
+        running = true;
+        readBluetoothChoice();
+        message = "Waiting for an accurate GPS fix";
+        persist();
+        try {
+            Notification n = notification();
+            if (Build.VERSION.SDK_INT >= 29)
+                startForeground(NOTIFICATION_ID, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION);
+            else startForeground(NOTIFICATION_ID, n);
+            if (btAssisted()) beginBluetoothWatch();
+            else startGpsUpdates();
+        } catch (Exception e) {
+            Log.e(TAG, "Unable to start location updates",e);
+            message = "Could not start GPS: " + e.getMessage();
+            shutdown();
+            return START_NOT_STICKY;
+        }
+        return START_STICKY;
+    }
+
+    // Privacy: samples are added only to an explicitly enabled trip route.
+    // Five decimal places are approximately metre resolution. Decimation
+    // keeps saved trips bounded even if monitoring stays on for hours.
+    private void sampleRoute(Location loc) {
+        if (!saveRoute || !recording || loc == null) return;
+        try {
+            double lat = Math.round(loc.getLatitude()*100000d)/100000d;
+            double lon = Math.round(loc.getLongitude()*100000d)/100000d;
+            if (route.length()>0) {
+                JSONArray last=route.getJSONArray(route.length()-1);
+                double dlat=Math.abs(lat-last.getDouble(0));
+                double dlon=Math.abs(lon-last.getDouble(1));
+                if (dlat<0.00007d && dlon<0.00007d) return;
+            }
+            route.put(new JSONArray().put(lat).put(lon));
+            if (route.length()>240) {
+                JSONArray reduced = new JSONArray();
+                for (int i=0; i<route.length(); i+=2) reduced.put(route.get(i));
+                // Keep most recent position, used for trip endpoint.
+                if ((route.length()-1)%2!=0) reduced.put(route.get(route.length()-1));
+                route=reduced;
+            }
+        } catch (Exception e) {Log.w(TAG,"Route sample ignored",e);}
+    }
+
+    @Override public void onLocationChanged(Location loc) {
+        if (!running) return;
+        if (loc == null || !loc.hasAccuracy() || loc.getAccuracy() > 55f) return;
+        // Ignore stale and mock positions before measuring miles or saving a route.
+        if (Build.VERSION.SDK_INT >= 31 ? loc.isMock() : loc.isFromMockProvider()) return;
+        long now = SystemClock.elapsedRealtime();
+        long fixAge = now - loc.getElapsedRealtimeNanos() / 1_000_000L;
+        if (fixAge > 12_000L || fixAge < -1_000L) return;
+        accuracy=loc.getAccuracy();
+        lastFixAt=System.currentTimeMillis();
+        if (lastLocation == null) {
+            lastLocation=loc;
+            sampleRoute(loc);
+            message="GPS connected";
+            persist();
+            maybeNotify();
+            return;
+        }
+        long elapsed = (loc.getElapsedRealtimeNanos()-lastLocation.getElapsedRealtimeNanos()) / 1_000_000L;
+        if (elapsed < 1500L) return;
+        float meters = lastLocation.distanceTo(loc);
+        double seconds=elapsed/1000d;
+        double calculatedSpeed=meters/seconds;
+        double speed=loc.hasSpeed() ? Math.max(0,loc.getSpeed()) : calculatedSpeed;
+        // Reject implausible GPS jumps (>145 mph) and low-quality points.
+        if (calculatedSpeed > 65d || meters > 1200f) {
+            lastLocation=loc;persist();return;
+        }
+        boolean driving = speed > 3.9d && calculatedSpeed > 1.9d;
+        boolean mobile = speed > 1.3d && calculatedSpeed > 1.0d && meters >= 3.5f;
+        // Route capture is separate from mileage accounting. Keep accurate points
+        // even when speed briefly drops below the mileage threshold (traffic, turns).
+        // This fixes trips that count miles but end without enough map points.
+        if (recording && saveRoute) sampleRoute(loc);
+        if ("auto".equals(mode) && !recording) {
+            movingHits = driving ? movingHits+1 : 0;
+            if (movingHits>=2) {
+                recording=true;
+                route=new JSONArray();
+                sampleRoute(lastLocation);
+         

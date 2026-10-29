@@ -86,6 +86,17 @@ jobs:
           grep -q 'versionCode 12' app/build.gradle
           grep -q 'setSmallIcon(R.drawable.ic_tracking_status)' app/src/main/java/com/pitnudge/app/MileageService.java
           echo 'Applied Bluetooth-assisted mileage tracker'
+      - name: Apply PitNudge v0.9.1 Bluetooth reliability fixes
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat v091-overlay/MileageService.part?? > app/src/main/java/com/pitnudge/app/MileageService.java
+          sed -i 's/versionCode 12/versionCode 13/' app/build.gradle
+          sed -i "s/versionName '0.9.0'/versionName '0.9.1'/" app/build.gradle
+          grep -q '!(btAssisted() && bluetoothConnected)' app/src/main/java/com/pitnudge/app/MileageService.java
+          grep -q 'versionCode 13' app/build.gradle
+          grep -q 'versionName '\''0.9.1'\''' app/build.gradle
+          echo 'Applied Bluetooth monitor hotfix'
       - uses: actions/setup-java@v4
         with:
           distribution: temurin

@@ -12,7 +12,20 @@
           "package_name": "com.pitnudge.app"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "318046989481-ccm4c7opdackl6qc2dd7u4rkp9vpufvj.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.pitnudge.app",
+            "certificate_hash": "6c1f24eeb7a622501430c943c195f23f04b09b78"
+          }
+        },
+        {
+          "client_id": "318046989481-9itoqgu2kn39vhm3r2iu6qj14lirksq4.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyAjYn4su4kIWnwOJNpuFt0RjyrDMXJogNk"
@@ -20,7 +33,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "318046989481-9itoqgu2kn39vhm3r2iu6qj14lirksq4.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }

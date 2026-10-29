@@ -71,6 +71,21 @@ jobs:
           grep -q 'versionCode 11' app/build.gradle
           grep -q 'setSmallIcon(R.drawable.ic_tracking_status)' app/src/main/java/com/pitnudge/app/MileageService.java
           echo 'Applied v0.8 recurring drive detection and map sampling fixes'
+      - name: Apply PitNudge v0.9 Bluetooth car trigger
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat v09-overlay/index.part?? > app/src/main/assets/index.html
+          cat v09-overlay/MainActivity.part?? > app/src/main/java/com/pitnudge/app/MainActivity.java
+          cat v09-overlay/MileageService.part?? > app/src/main/java/com/pitnudge/app/MileageService.java
+          cat v09-overlay/AndroidManifest.part?? > app/src/main/AndroidManifest.xml
+          cat v09-overlay/app-build.gradle.part?? > app/build.gradle
+          grep -q 'BLUETOOTH_CONNECT' app/src/main/AndroidManifest.xml
+          grep -q 'getBluetoothCarConfig' app/src/main/java/com/pitnudge/app/MainActivity.java
+          grep -q 'bluetoothReceiver' app/src/main/java/com/pitnudge/app/MileageService.java
+          grep -q 'versionCode 12' app/build.gradle
+          grep -q 'setSmallIcon(R.drawable.ic_tracking_status)' app/src/main/java/com/pitnudge/app/MileageService.java
+          echo 'Applied Bluetooth-assisted mileage tracker'
       - uses: actions/setup-java@v4
         with:
           distribution: temurin

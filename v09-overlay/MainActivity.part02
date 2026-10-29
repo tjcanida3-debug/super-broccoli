@@ -1,0 +1,81 @@
+rror",e.getMessage());}catch(Exception x){}emitJs("onCloudWrite",o.toString());});
+        };
+        uploadHandler.postDelayed(pendingUpload,1500);
+    }
+    private class AndroidBridge {
+        @JavascriptInterface public String getAuthState(){return authState();}
+        @JavascriptInterface public void signInGoogle(){runOnUiThread(()->signInWithGoogle());}
+        @JavascriptInterface public void signInApple(){runOnUiThread(()->signInWithApple());}
+        @JavascriptInterface public void signOut(){runOnUiThread(()->{
+            if(pendingUpload!=null)uploadHandler.removeCallbacks(pendingUpload);
+            if(auth!=null)auth.signOut();emitAuthState();
+        });}
+        @JavascriptInterface public String getMileageState(){return MileageService.snapshot(MainActivity.this);}
+        @JavascriptInterface public String getBluetoothCarConfig(){return selectedBluetoothJson();}
+        @JavascriptInterface public void requestBluetoothPermission(){runOnUiThread(()->{
+            if(!canUseBluetooth() && Build.VERSION.SDK_INT>=31)
+                requestPermissions(new String[]{Manifest.permission.BLUETOOTH_CONNECT},REQ_BLUETOOTH);
+            else emitBluetoothUpdated();
+        });}
+        @JavascriptInterface public void selectBluetoothCar(String address){MainActivity.this.selectBluetoothCar(address);}
+        @JavascriptInterface public void startMileage(String vehicleId, String mode, String category, boolean saveRoute){beginMileage(vehicleId, mode, category, saveRoute);}
+        @JavascriptInterface public void stopMileage(){mileageCommand(MileageService.STOP, null);}
+        @JavascriptInterface public void finishMileageTrip(){mileageCommand(MileageService.FINISH, null);}
+        @JavascriptInterface public void discardMileage(){mileageCommand(MileageService.CANCEL, null);}
+        @JavascriptInterface public void setMileageCategory(String category){mileageCommand(MileageService.CATEGORY, category);}
+        @JavascriptInterface public void setMileageRoute(boolean enabled){runOnUiThread(()->{
+            Intent i=new Intent(MainActivity.this,MileageService.class).setAction(MileageService.ROUTE);
+            i.putExtra("saveRoute",enabled);
+            try{startService(i);}catch(Exception e){android.util.Log.w("PitNudge","Could not change route preference",e);}
+        });}
+        @JavascriptInterface public void ackMileageEvent(String eventId){MileageService.acknowledge(MainActivity.this,eventId);}
+        @JavascriptInterface public void fetchCloud(){runOnUiThread(()->MainActivity.this.fetchCloud());}
+        @JavascriptInterface public void saveCloud(String json){runOnUiThread(()->MainActivity.this.saveCloud(json));}
+
+        @JavascriptInterface public void saveFile(String fileName, String contents, String mime) {
+            String safeName = fileName.replaceAll("[^a-zA-Z0-9._-]", "_");
+            if (safeName.isEmpty()) safeName = "pitnudge-export.txt";
+            try {
+                OutputStream os;
+                if (Build.VERSION.SDK_INT >= 29) {
+                    ContentValues vals = new ContentValues();
+                    vals.put(MediaStore.Downloads.DISPLAY_NAME, safeName);
+                    vals.put(MediaStore.Downloads.MIME_TYPE, mime == null ? "text/plain" : mime);
+                    vals.put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/PitNudge");
+                    Uri dest = getContentResolver().insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, vals);
+                    if (dest == null) throw new Exception("Could not create download");
+                    os = getContentResolver().openOutputStream(dest);
+                } else {
+                    File folder = getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS);
+                    if (folder == null) throw new Exception("No storage available");
+                    os = new FileOutputStream(new File(folder, safeName));
+                }
+                if (os == null) throw new Exception("Could not open download");
+                try (OutputStream stream = os) {
+                    stream.write(contents.getBytes(StandardCharsets.UTF_8));
+                }
+                runOnUiThread(() -> Toast.makeText(MainActivity.this,
+                        "Saved export to PitNudge downloads", Toast.LENGTH_LONG).show());
+            } catch (Exception e) {
+                runOnUiThread(() -> Toast.makeText(MainActivity.this,
+                        "Could not save export: " + e.getMessage(), Toast.LENGTH_LONG).show());
+            }
+        }
+    }
+
+    @Override protected void onResume(){
+        super.onResume();
+        emitBluetoothUpdated();
+    }
+
+    @Override public void onBackPressed() {
+        // HTML tabs are a single local page; don't silently close the app mid-session.
+        if (webView.canGoBack()) webView.goBack();
+        else super.onBackPressed();
+    }
+
+    @Override protected void onDestroy() {
+        if (webView != null) webView.destroy();
+        super.onDestroy();
+    }
+}

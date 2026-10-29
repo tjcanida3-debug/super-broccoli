@@ -1,0 +1,144 @@
+e="#32151c" stroke-width="2"/></svg><div class="small muted">Route shape preview (no streets). <strong>Green</strong> = start · <strong>Red</strong> = finish.</div>`;
+}
+let routeLeafletPromise=null,routeMapInstance=null,routeMapLine=null,routeMapEndMarker=null,liveRouteModal=false;
+function loadRouteLeaflet(){
+ if(window.L)return Promise.resolve(window.L);
+ if(routeLeafletPromise)return routeLeafletPromise;
+ routeLeafletPromise=new Promise((resolve,reject)=>{
+  if(!document.getElementById('pn-leaflet-css')){
+    const css=document.createElement('link');css.id='pn-leaflet-css';css.rel='stylesheet';css.href='https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';css.integrity='sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=';css.crossOrigin='anonymous';document.head.appendChild(css);
+  }
+  const script=document.createElement('script');script.src='https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';script.integrity='sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=';script.crossOrigin='anonymous';script.onload=()=>window.L?resolve(window.L):reject(Error('Map library unavailable'));script.onerror=()=>reject(Error('Map library unavailable'));document.head.appendChild(script);
+ });
+ routeLeafletPromise.catch(()=>{routeLeafletPromise=null});
+ return routeLeafletPromise;
+}
+async function buildRouteStreetMap(points){
+ const target=$('tripRouteStreetMap');if(!target||!points||points.length<2)return;
+ try{
+  const L=await loadRouteLeaflet();
+  if(!$('tripRouteStreetMap')||target!==$('tripRouteStreetMap')||!$('modal').open)return;
+  if(routeMapInstance){routeMapInstance.remove();routeMapInstance=null;routeMapLine=null;routeMapEndMarker=null}
+  const map=L.map(target,{zoomControl:true,scrollWheelZoom:false});
+  routeMapInstance=map;
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{
+   attribution:'© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>',
+   maxZoom:19,referrerPolicy:'strict-origin-when-cross-origin',keepBuffer:1
+  }).addTo(map);
+  routeMapLine=L.polyline(points,{color:'#ee5667',weight:5,opacity:.95}).addTo(map);
+  L.circleMarker(points[0],{radius:7,color:'#163e35',fillColor:'#4ee3a1',fillOpacity:1}).addTo(map).bindPopup('Trip started');
+  routeMapEndMarker=L.circleMarker(points[points.length-1],{radius:7,color:'#672531',fillColor:'#ff6f78',fillOpacity:1}).addTo(map).bindPopup('Latest position / trip finished');
+  if(points.length===2&&points[0][0]===points[1][0]&&points[0][1]===points[1][1])map.setView(points[0],15);
+  else map.fitBounds(routeMapLine.getBounds(),{padding:[30,30],maxZoom:16});
+  const status=$('routeMapStatus');if(status)status.textContent='Street map loaded · red line is your recorded GPS path';
+  setTimeout(()=>{if(routeMapInstance===map)map.invalidateSize()},150);
+ }catch(err){const status=$('routeMapStatus');if(status)status.textContent='Street map unavailable offline. The recorded route shape is still shown below.'}
+}
+function showRouteMap(tripId){
+ const live=tripId===null;
+ const trip=live?activeTrip:db.trips.find(x=>x.id===tripId);
+ if(!trip){notify('Trip not found.');return}
+ const points=normalRoute(trip.route);
+ if(points.length<2){notify('This trip has no route map. Enable Save trip route maps before driving.');return}
+ liveRouteModal=live;
+ const title=live?'Live GPS route':'Saved GPS route';
+ const body=`<div class="stack"><div class="note"><strong>${miles(trip.miles)} GPS miles</strong> · ${esc(trip.type==='business'?'Business':'Personal')} · ${esc(trip.date||trip.startedAt?.slice(0,10)||today())}</div><div id="tripRouteStreetMap" style="height:300px;background:#152338;border:1px solid #33445c;border-radius:13px"></div><div id="routeMapStatus" class="small muted">Loading street map…</div><div><div class="labelRow"><strong>Recorded GPS path</strong><span class="chip">${points.length} points</span></div><div id="routeMapSketch">${routeSketch(points)}</div></div><p class="small muted">GPS route lines show where the phone reported movement, not necessarily the exact road driven. GPS mileage is an estimate; compare it with your vehicle's dashboard. Loading the street map contacts OpenStreetMap servers for map tiles.</p>${live?'':`<div class="actions"><button class="button secondary" data-action="editTrip" data-id="${esc(trip.id)}">Compare / correct trip miles</button><button class="button ghost" data-action="removeTripRoute" data-id="${esc(trip.id)}">Delete route only</button></div>`}</div>`;
+ if(routeMapInstance){routeMapInstance.remove();routeMapInstance=null;routeMapLine=null;routeMapEndMarker=null}
+ showModal(title,body,()=>{});
+ buildRouteStreetMap(points);
+}
+function updateLiveRouteMap(){
+ if(!liveRouteModal||!$('modal')?.open)return;
+ const points=normalRoute(activeTrip?.route);
+ if(points.length<2)return;
+ if(routeMapLine){routeMapLine.setLatLngs(points);routeMapEndMarker?.setLatLng(points[points.length-1]);}
+ const preview=$('routeMapSketch');if(preview)preview.innerHTML=routeSketch(points);
+}
+function removeTripRoute(tripId){
+ const trip=db.trips.find(x=>x.id===tripId);if(!trip||!Array.isArray(trip.route))return;
+ if(!confirmAction('Delete the saved route coordinates from this trip? The mileage and trip record will remain.'))return;
+ trip.route=[];
+ if(!save()){notify('Could not save route removal.');return}
+ $('modal')?.close();notify('Route deleted. Mileage kept.');render();
+}
+
+function btCarStatusText(){
+ if(!btCarConfig.selectedAddress)return 'GPS-only mode · Bluetooth is not selected';
+ if(!btCarConfig.permission)return 'Nearby devices permission required for Bluetooth trigger';
+ if(!btCarConfig.enabled)return 'Turn on Bluetooth to watch for your car';
+ if(!nativeMileageState.running)return 'Car selected: '+esc(btCarConfig.selectedName)+' · turn on auto-detect to start monitoring';
+ if(nativeMileageState.bluetoothAssisted && nativeMileageState.bluetoothConnected)return 'Car connected: '+esc(btCarConfig.selectedName)+' · GPS can track driving';
+ if(nativeMileageState.bluetoothAssisted)return 'Waiting for '+esc(btCarConfig.selectedName)+' to connect · GPS paused';
+ return 'Bluetooth selected · restart auto-detect to activate Bluetooth-triggered GPS';
+}
+function refreshBluetoothDevices(renderAfter=true){
+ if(!window.NativePitNudge?.getBluetoothCarConfig)return;
+ try{btCarConfig=JSON.parse(window.NativePitNudge.getBluetoothCarConfig()||'{}')||btCarConfig;}catch(err){console.warn('Bluetooth status unavailable',err)}
+ if(renderAfter&&page==='drive')render();
+}
+window.PitNudgeBluetoothUpdated=()=>refreshBluetoothDevices(true);
+function nativeMileageAvailable(){return !!window.NativePitNudge?.getMileageState && !!window.NativePitNudge?.startMileage}
+function refreshNativeMileage(){
+ if(!nativeMileageAvailable())return;
+ let next;
+ try{next=JSON.parse(window.NativePitNudge.getMileageState()||'{}')}catch{return}
+ if(!next||typeof next!=='object')return;
+ let old=nativeMileageState, changed=false, newSaved=0;
+ for(const e of (Array.isArray(next.events)?next.events:[])){
+   if(!e?.id)continue;
+   if(db.trips.some(t=>t.nativeEventId===e.id)){
+     window.NativePitNudge.ackMileageEvent(e.id);
+     continue;
+   }
+   let v=db.vehicles.find(x=>x.id===e.vehicleId);
+   let m=Number(e.miles);
+   if(v&&Number.isFinite(m)&&m>=.1&&m<10000){
+     const route=normalRoute(e.route);
+     const trip={id:id(),nativeEventId:e.id,vehicleId:v.id,date:(e.startedAt||new Date().toISOString()).slice(0,10),miles:Math.round(m*10)/10,type:e.category==='business'?'business':'personal',source:'gps',note:e.automatic?'Detected while driving (Android GPS)':'Tracked with Android GPS',route};
+     db.trips.push(trip);
+     v.mileage=Math.round((Number(v.mileage)+trip.miles)*10)/10;
+     if(save()){window.NativePitNudge.ackMileageEvent(e.id);changed=true;newSaved+=trip.miles}
+     else{db.trips.pop();v.mileage=Math.round((Number(v.mileage)-trip.miles)*10)/10}
+   }else if(!v){
+     // Preserve events if a matching car is temporarily missing during cloud restore.
+     console.warn('PitNudge trip awaiting vehicle restore');
+   }else window.NativePitNudge.ackMileageEvent(e.id);
+ }
+ let wasRunning=!!old.running, wasRecording=!!old.recording, oldVehicle=old.vehicleId;
+ nativeMileageState=next;
+ if(next.running)nativeMileageStarting=false;
+ if(next.running&&next.recording){
+   activeTrip={native:true,vehicleId:next.vehicleId,startedAt:next.startedAt||new Date().toISOString(),miles:Number(next.miles)||0,type:next.category==='business'?'business':'personal',source:'gps',automatic:next.mode==='auto',route:normalRoute(next.route)};
+ }else activeTrip=null;
+ // Keep the user's choice across trips and Android service interruptions.
+ // A new monitoring session can only start while the PitNudge Activity is visible.
+ if(next.running && next.mode==='auto' && !db.autoDetect){db.autoDetect=true;save()}
+ if(!next.running && next.stopRequested && db.autoDetect){db.autoDetect=false;save()}
+ if(next.running && !!next.saveRoute!==!!db.saveRouteMaps && Date.now()-nativeRouteSyncAt>4000){
+   nativeRouteSyncAt=Date.now();
+   window.NativePitNudge.setMileageRoute(!!db.saveRouteMaps);
+ }
+ if(!next.running && !next.stopRequested && db.autoDetect && !nativeMileageStarting && !nativeAutoResumePending
+     && !document.hidden && Date.now()-nativeAutoResumeAt>30000){
+    nativeAutoResumeAt=Date.now();
+    nativeAutoResumePending=true;
+    // Restarts monitoring only after the user has previously enabled the opt-in switch.
+    // Never silently request a new background location session.
+    setTimeout(()=>{nativeAutoResumePending=false;if(db.autoDetect&&!nativeMileageState.running && !document.hidden)startNativeMileage('auto');},700);
+ }
+ if(newSaved>0)notify(miles(newSaved)+' GPS miles saved to your estimated odometer.');
+ if(changed||wasRunning!==!!next.running||wasRecording!==!!next.recording||oldVehicle!==next.vehicleId){render();updateLiveRouteMap();return}
+ const live=$('liveMiles');if(live)live.innerHTML=miles(activeTrip?.miles||0)+' <span style="font-size:14px">mi</span>';
+ const desc=$('liveKind');if(desc && next.running)desc.textContent=next.recording?'Recording GPS miles':next.message||'Watching for driving';
+ const btStatus=$('bluetoothCarStatus');if(btStatus)btStatus.innerHTML=btCarStatusText();
+ const mapStatus=$('gpsRouteCaptureStatus');if(mapStatus)mapStatus.textContent=next.running?(next.saveRoute?'Map saving ON · '+(Array.isArray(next.route)?next.route.length:0)+' points captured so far':'Map saving OFF · enable the checkbox above'):(db.saveRouteMaps?'Map setting ON · start tracking to capture your next route':'Route maps OFF');
+ updateLiveRouteMap();
+}
+function startNativeMileage(mode){
+ const v=vehicle();if(!v){notify('Add a vehicle first.');return false}
+ if(nativeMileageState.running){notify('GPS mileage tracking is already running.');return false}
+ nativeMileageStarting=true;
+ window.NativePitNudge.startMileage(v.id,mode,'personal',!!db.saveRouteMaps);
+ setTimeout(refreshNativeMileage,1200);
+ if(page==='drive')render();
+ notify(mode==='auto'?'Watching for driving:

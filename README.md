@@ -1,20 +1,18 @@
-# PitNudge Android — v0.8 beta
+# PitNudge Android — v0.9 Bluetooth car-trigger beta
 
-Vehicle maintenance, mileage, receipts, Google sign-in and cloud sync with opt-in GPS trip tracking.
+PitNudge remains an Android vehicle maintenance, account-synced garage, GPS mileage log, and optional route-map tracker.
 
-## v0.8: Automatic tracking across drives
-- The **Keep auto-detect ON between drives** setting is an explicit opt-in.
-- When turned on in a visible Activity, Android uses a foreground location service with an ongoing notification. A drive finishes automatically after about 3 minutes stationary. **The monitor stays on** after the trip for the next drive, until the user explicitly turns it off.
-- The **Finish current drive** action saves an ongoing trip while retaining the auto-monitoring service. The separate **Turn off auto-detect** action stops it.
-- If Android kills the service, opening the app tries to resume the previously opted-in monitoring. If the user explicitly stops it via the notification, the app honors that choice and does not auto-restart.
-- This is not guaranteed 24/7 passive background detection. Reboots, force-stops, battery optimization, lost permissions and OS background restrictions may interrupt monitoring. A persistent foreground GPS monitor may use substantial battery. The app does not silently start background location tracking without a foreground user action.
+## What's new in v0.9
+- The **Trips → Bluetooth car trigger** option lists devices **already paired** in Android settings (requires Android 12+ Nearby devices / BLUETOOTH_CONNECT permission).
+- Select your car's audio/Bluetooth connection once; that choice (device MAC address and display name) is stored **locally on this phone**, not added to your cloud garage or export.
+- After **Keep auto-detect ON between drives** is enabled while PitNudge is visible, the existing ongoing Android foreground service watches connection/disconnection events for the chosen car. When the car connects, GPS starts watching for movement; after a disconnect, the app waits ~45 seconds to avoid short dropouts, finishes any active trip, and returns to waiting for the next Bluetooth connection.
+- The connected car is checked on initial service start through A2DP/Headset Bluetooth profiles, so an existing car connection may be recognized even when monitoring starts after the car connects.
+- **GPS-only auto-detect** continues to work with no paired car selected. Mileage and optional route maps still use GPS. Bluetooth does NOT read the vehicle's actual odometer.
+- The existing status-bar tracking notification stays visible while auto monitoring is enabled. The car's Bluetooth state is shown on the Trips screen.
 
-## v0.8: Fix missing trip maps
-- The Android service captures valid GPS route points independently of the mileage speed threshold, only when **Save trip route maps** is enabled.
-- The app reconciles its saved route preference with the native Android service and shows **Map saving ON/OFF** plus the number of GPS points captured, so users can verify it is actually recording coordinates before driving.
-- **View map** appears for a saved trip only when at least two GPS points were captured. Trips saved before route capture was active cannot be retroactively mapped.
-- Routes can be removed separately from mileage; if cloud sync is enabled, route coordinates in trip logs may be included in cloud backups. Map tiles require internet access.
-- GPS distance remains an estimate; compare it with your actual vehicle odometer.
+## Limitations / testing
+Bluetooth connection events can vary by vehicle and Android device. Some car systems do not expose A2DP/headset profiles or reliable connection broadcasts; test with the actual car. The foreground monitor must first be started from the visible PitNudge app. It does **not** guarantee automatic starts after phone reboot, force-stop, Android battery restrictions, or if the service was stopped. Android 12+ background foreground-service restrictions, especially for location, prevent claiming that a disconnected app can always wake up on Bluetooth connection. Monitoring uses a persistent notification and can consume battery.
 
-## Build
-GitHub Actions extracts the Android base source ZIP and applies source overlays (v0.3 Firebase/photo, v0.5 mileage, v0.6 status icon, v0.7 route maps, and v0.8 fixes), then builds a debug APK. Launcher icon is unchanged. GitHub Actions build success does not establish GPS behavior on a specific phone; test on an Android device.
+Bluetooth and device names are accessed only after the user's permission. Local paired-device addresses are not uploaded to cloud backups. Saved route maps can contain sensitive travel history; the route saving setting remains optional. The current prototype's separate Firebase cloud synchronization and map features are retained. Always export a backup before replacing a debug test build.
+
+The GitHub Actions workflow assembles the baseline project and overlays v0.3 (cloud/photo), v0.5 (GPS mileage), v0.6 (tracking icon), v0.7 (routes), v0.8 (continuous monitoring fixes), and v0.9 (Bluetooth trigger), then builds the debug APK.

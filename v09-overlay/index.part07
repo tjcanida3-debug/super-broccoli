@@ -1,0 +1,163 @@
+Volvo","Audi","Pontiac","Saturn","Scion","Suzuki","Mini","Land Rover","Porsche","Genesis","Rivian"];
+
+// Offline catalog is always usable; NHTSA extends it where browser access allows.
+const OTHER_CHOICE='__other__';
+const normalizeName=n=>String(n||'').trim().toLocaleLowerCase().replace(/[\s\-_.]+/g,' ');
+const canonicalMake=name=>{
+  const alias={'chevy':'Chevrolet','mercedes':'Mercedes-Benz','mercedes benz':'Mercedes-Benz','vw':'Volkswagen','mini cooper':'Mini','range rover':'Land Rover','dodge ram':'Ram'};
+  const wanted=alias[normalizeName(name)]||name;
+  return Object.keys(OFFLINE_VEHICLES).find(k=>normalizeName(k)===normalizeName(wanted))||String(wanted||'');
+};
+const uniqueNames=arr=>Array.from(new Map(arr.filter(Boolean).map(n=>[normalizeName(n),String(n).trim()])).values()).sort((a,b)=>a.localeCompare(b,undefined,{sensitivity:'base',numeric:true}));
+const vehicleOption=(name,selected)=>`<option value="${esc(name)}" ${name===selected?'selected':''}>${esc(name)}</option>`;
+const selectField=(label,name,id,options)=>`<label class="field">${label}<select name="${name}" id="${id}" required>${options}</select></label>`;
+async function vehicleApi(path,timeout=9000){
+  const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),timeout);
+  try{
+    const res=await fetch('https://vpic.nhtsa.dot.gov/api/vehicles/'+path,{signal:controller.signal});
+    if(!res.ok)throw Error('Vehicle catalog unavailable');const data=await res.json();
+    return Array.isArray(data?.Results)?data.Results:[];
+  }finally{clearTimeout(timer)}
+}
+const makeCache={result:null,loaded:false};
+const modelCache=new Map();
+async function enrichMakes(form){
+  if(makeCache.loaded)return makeCache.result||[];
+  try{
+    const response=await Promise.allSettled([
+      vehicleApi('GetMakesForVehicleType/car?format=json'),
+      vehicleApi('GetMakesForVehicleType/truck?format=json'),
+      vehicleApi('GetMakesForVehicleType/multipurpose%20passenger%20vehicle?format=json')
+    ]);
+    const names=uniqueNames(response.flatMap(r=>r.status==='fulfilled'?r.value.map(x=>x.MakeName||x.Make_Name):[]));
+    if(names.length){makeCache.result=names;makeCache.loaded=true;return names;}
+  }catch(e){}
+  return [];
+}
+function installVehicleDropdowns(old){
+ const form=$('vehicleEntryForm');if(!form)return;
+ const yearEl=form.elements.namedItem('year'),makeEl=form.elements.namedItem('make'),modelEl=form.elements.namedItem('model');
+ const otherMake=form.elements.namedItem('otherMake'),otherModel=form.elements.namedItem('otherModel');
+ const makeBox=$('otherMakeBox'),modelBox=$('otherModelBox'),status=$('catalogStatus');
+ let makeNames=uniqueNames(Object.keys(OFFLINE_VEHICLES));
+ let remoteModels=null,lookupCounter=0;
+ const oldMake=canonicalMake(old?.make||''),oldModel=String(old?.model||'');
+ function populateMakes(preferred){
+   const all=uniqueNames([...makeNames,...Object.keys(OFFLINE_VEHICLES)]);
+   let used=new Set();
+   const favorites=POPULAR_MAKES.filter(n=>all.some(x=>normalizeName(x)===normalizeName(n))).map(n=>all.find(x=>normalizeName(x)===normalizeName(n)));
+   favorites.forEach(n=>used.add(normalizeName(n)));
+   const rest=all.filter(n=>!used.has(normalizeName(n)));
+   const existing=all.find(n=>normalizeName(n)===normalizeName(preferred));
+   makeEl.innerHTML='<option value="">Choose make…</option>'+
+      `<optgroup label="Common makes">${favorites.map(n=>vehicleOption(n,existing)).join('')}</optgroup>`+
+      `<optgroup label="More makes (A–Z)">${rest.map(n=>vehicleOption(n,existing)).join('')}</optgroup>`+
+      `<option value="${OTHER_CHOICE}">Other / not listed…</option>`;
+   if(preferred&&!existing){makeEl.value=OTHER_CHOICE;otherMake.value=preferred;}
+   else makeEl.value=existing||'';
+   toggleCustom();
+ }
+ function toggleCustom(){
+   const customMake=makeEl.value===OTHER_CHOICE;
+   makeBox.hidden=!customMake;otherMake.required=customMake;
+   const customModel=modelEl.value===OTHER_CHOICE;
+   modelBox.hidden=!customModel;otherModel.required=customModel;
+ }
+ function populateModels(preferred='',options=null){
+   const name=makeEl.value===OTHER_CHOICE?otherMake.value.trim():makeEl.value;
+   const offline=OFFLINE_VEHICLES[canonicalMake(name)]||[];
+   const models=uniqueNames([...(options||[]),...offline]);
+   const existing=models.find(x=>normalizeName(x)===normalizeName(preferred));
+   modelEl.innerHTML='<option value="">Choose model…</option>'+models.map(n=>vehicleOption(n,existing)).join('')+`<option value="${OTHER_CHOICE}">Other / not listed…</option>`;
+   if(preferred===OTHER_CHOICE){modelEl.value=OTHER_CHOICE;}
+   else if(preferred&&!existing){modelEl.value=OTHER_CHOICE;otherModel.value=preferred;}
+   else modelEl.value=existing||'';
+   toggleCustom();
+ }
+ async function lookupModels(preferred=''){
+   const ticket=++lookupCounter;
+   const chosenMake=makeEl.value===OTHER_CHOICE?otherMake.value.trim():makeEl.value;
+   const yr=Number(yearEl.value);
+   if(!chosenMake){populateModels('');status.textContent='Choose a make to see models.';return;}
+   populateModels(preferred);
+   if(!navigator.onLine){status.textContent='Showing built-in models (offline).';return;}
+   status.textContent='Checking for more vehicle models…';
+   const key=normalizeName(chosenMake)+'-'+yr;
+   try{
+     let result=modelCache.get(key);
+     if(!result){
+       const path=yr>1995?`GetModelsForMakeYear/make/${encodeURIComponent(chosenMake)}/modelyear/${yr}?format=json`:`GetModelsForMake/${encodeURIComponent(chosenMake)}?format=json`;
+       result=uniqueNames((await vehicleApi(path)).map(x=>x.Model_Name||x.ModelName));
+       if(result.length)modelCache.set(key,result);
+     }
+     if(ticket!==lookupCounter||!form.isConnected)return;
+     const current=modelEl.value===OTHER_CHOICE?OTHER_CHOICE:modelEl.value;
+     populateModels(current||preferred,result);
+     status.textContent=result.length?`Showing built-in choices and additional NHTSA models for ${yr}.`:'Showing built-in models. Choose Other if yours is missing.';
+   }catch(e){
+     if(ticket!==lookupCounter||!form.isConnected)return;
+     status.textContent='Showing built-in models. Choose Other if yours is missing.';
+   }
+ }
+ populateMakes(oldMake);
+ populateModels(oldModel);
+ makeEl.addEventListener('change',()=>{otherMake.value='';otherModel.value='';populateModels('');lookupModels();});
+ modelEl.addEventListener('change',()=>{otherModel.value='';toggleCustom();});
+ yearEl.addEventListener('change',()=>{lookupModels(modelEl.value===OTHER_CHOICE?otherModel.value:modelEl.value);});
+ otherMake.addEventListener('change',()=>lookupModels(modelEl.value===OTHER_CHOICE?OTHER_CHOICE:modelEl.value));
+ status.textContent='Built-in cars and trucks work offline. More options load when available.';
+ // Additional online makes, including commercial and older makes.
+ enrichMakes(form).then(found=>{
+   if(!found.length||!form.isConnected)return;
+   const choice=makeEl.value===OTHER_CHOICE?otherMake.value:makeEl.value;
+   makeNames=uniqueNames([...makeNames,...found]);populateMakes(choice);
+   if(!choice)status.textContent='More makes loaded. Choose a make and model.';
+ });
+ if(oldMake)lookupModels(oldModel);
+}
+
+function vehicleDialog(editId){
+ let old=db.vehicles.find(v=>v.id===editId),editing=!!old;
+ const thisYear=new Date().getFullYear();
+ const yearOptions=Array.from({length:thisYear+2-1950+1},(_,i)=>thisYear+2-i).map(n=>`<option value="${n}" ${(old?.year||thisYear)===n?'selected':''}>${n}</option>`).join('');
+ const body=`<form id="vehicleEntryForm"><div class="formGrid">
+  ${selectField('Year','year','yearChoice',yearOptions)}
+  ${selectField('Make','make','makeChoice','<option value="">Loading makes…</option>')}
+  <label class="field wide" id="otherMakeBox" hidden>Type make (only if not listed)<input name="otherMake" maxlength="45" placeholder="Vehicle make" /></label>
+  ${selectField('Model','model','modelChoice','<option value="">Choose a make first…</option>')}
+  <label class="field wide" id="otherModelBox" hidden>Type model (only if not listed)<input name="otherModel" maxlength="45" placeholder="Vehicle model" /></label>
+  ${field('Current odometer (miles)','mileage',true,'number',old?.mileage??'','min="0" step="0.1"')}
+  <div class="field wide"><span>Vehicle picture</span><div id="carPhotoPreview">${vehiclePicture(old||{year:thisYear,make:'',model:''},'form')}</div><div class="vehiclePhotoNote">PitNudge looks for a reusable model photo online. Photos may show a nearby model year; if none is available, a vehicle illustration appears. You can also choose your own photo.</div></div>
+  <label class="field wide">Use a photo of my car (optional)<input name="vehiclePhoto" type="file" accept="image/*" /></label>
+  <label class="toggle wide"><input name="defaultPicture" type="checkbox" /> Use the default picture instead</label>
+  </div><p class="small muted" id="catalogStatus" role="status" aria-live="polite">Pick year, make and model from the lists.</p>
+  <p class="small muted">Not seeing your vehicle? Pick <strong>Other / not listed</strong>. Your odometer is your starting point; new trips add estimated miles.</p>
+  <button class="button space" type="submit">${editing?'Save vehicle':'Add to garage'}</button></form>`;
+ showModal(editing?'Edit vehicle':'Add a vehicle',body,async (f,form)=>{
+   let year=Number(f.get('year')),mileage=Number(f.get('mileage'));
+   let make=String(f.get('make'))===OTHER_CHOICE?String(f.get('otherMake')||'').trim():String(f.get('make')||'').trim();
+   let model=String(f.get('model'))===OTHER_CHOICE?String(f.get('otherModel')||'').trim():String(f.get('model')||'').trim();
+   if(!make||!model||!Number.isFinite(mileage)||mileage<0||year<1950||year>new Date().getFullYear()+2){notify('Please choose a valid vehicle and mileage.');return false}
+   let photo=old?.photo||'';
+   if(form.elements.namedItem('defaultPicture').checked)photo='';
+   const picked=form.elements.namedItem('vehiclePhoto').files[0];
+   if(picked&&!form.elements.namedItem('defaultPicture').checked)photo=await photoData(picked);
+   if(editing){
+     const before={...old};Object.assign(old,{year,make,model,mileage,photo});
+     if(!save()){Object.assign(old,before);return false}
+   }else{
+     let v={id:id(),year,make,model,mileage,photo,schedules:{}};db.vehicles.push(v);db.selected=v.id;
+     if(!save()){db.vehicles.pop();db.selected=db.vehicles[0]?.id||null;return false}
+   }
+   notify(editing?'Vehicle updated.':'Vehicle added!')
+ });
+ installVehicleDropdowns(old);
+ setTimeout(hydrateVehiclePhotos,200);
+ const form=$('vehicleEntryForm'),preview=$('carPhotoPreview');
+ if(form&&preview){
+   const drawPreview=(img)=>{
+     const sel=(name)=>form.elements.namedItem(name);
+     const model=sel('model').value===OTHER_CHOICE?sel('otherModel').value:sel('model').value;
+     const make=sel('make').value===OTHER_CHOICE?sel('otherMake').value:sel('make').value;
+     const draft={year:Number(sel('year').value),make,model,photo:img!==undefined?img:(sel('defaultPicture').checked?'':old?.photo||'')};
+ 

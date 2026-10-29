@@ -1,0 +1,186 @@
+  o.put("permission",canUseBluetooth());
+            o.put("selectedAddress",p.getString(MileageService.BT_ADDRESS,""));
+            o.put("selectedName",p.getString(MileageService.BT_NAME,""));
+            BluetoothManager manager=(BluetoothManager)getSystemService(BLUETOOTH_SERVICE);
+            BluetoothAdapter adapter=manager==null?null:manager.getAdapter();
+            o.put("enabled",adapter!=null&&adapter.isEnabled());
+            JSONArray options=new JSONArray();
+            if(adapter!=null&&adapter.isEnabled()&&canUseBluetooth()) {
+                for(BluetoothDevice d:adapter.getBondedDevices()) {
+                    JSONObject item=new JSONObject();
+                    item.put("address",d.getAddress());
+                    item.put("name",d.getName()==null?"Paired device":d.getName());
+                    options.put(item);
+                }
+            }
+            o.put("devices",options);
+        }catch(Exception e){
+            android.util.Log.w("PitNudge","Bluetooth device list",e);
+            try{o.put("error","Bluetooth permission or paired devices unavailable");}catch(Exception ignored){}
+        }
+        return o.toString();
+    }
+    private void selectBluetoothCar(String mac){
+        runOnUiThread(()->{
+            if(!canUseBluetooth()){
+                if(Build.VERSION.SDK_INT>=31)requestPermissions(new String[]{Manifest.permission.BLUETOOTH_CONNECT},REQ_BLUETOOTH);
+                return;
+            }
+            String address="",name="";
+            if(mac!=null && !mac.isEmpty()){
+                try{
+                    BluetoothManager mgr=(BluetoothManager)getSystemService(BLUETOOTH_SERVICE);
+                    BluetoothAdapter adapter=mgr==null?null:mgr.getAdapter();
+                    if(adapter==null)throw new IllegalStateException("Bluetooth unavailable");
+                    boolean found=false;
+                    for(BluetoothDevice d:adapter.getBondedDevices()){
+                        if(mac.equalsIgnoreCase(d.getAddress())){address=d.getAddress();name=d.getName();found=true;break;}
+                    }
+                    if(!found){Toast.makeText(this,"Pair your car in Android Bluetooth settings first",Toast.LENGTH_LONG).show();return;}
+                }catch(Exception e){Toast.makeText(this,"Bluetooth selection failed: "+e.getMessage(),Toast.LENGTH_LONG).show();return;}
+            }
+            getSharedPreferences(MileageService.BT_PREF,MODE_PRIVATE).edit()
+                .putString(MileageService.BT_ADDRESS,address)
+                .putString(MileageService.BT_NAME,name==null?"My car":name).apply();
+            Intent command=new Intent(this,MileageService.class).setAction(MileageService.BLUETOOTH_CONFIG);
+            try{startService(command);}catch(Exception ignored){}
+            emitBluetoothUpdated();
+        });
+    }
+    private void emitBluetoothUpdated(){
+        runOnUiThread(()->{
+            if(webView!=null)webView.evaluateJavascript("window.PitNudgeBluetoothUpdated&&window.PitNudgeBluetoothUpdated()",null);
+        });
+    }
+
+    private void mileageCommand(String action, String category) {
+        runOnUiThread(() -> {
+            Intent intent = new Intent(this, MileageService.class).setAction(action);
+            if (category != null) intent.putExtra("category", category);
+            try { startService(intent); }
+            catch(Exception e){ Toast.makeText(this,"Mileage tracker: "+e.getMessage(),Toast.LENGTH_LONG).show(); }
+        });
+    }
+
+    @Override public void onRequestPermissionsResult(int code, String[] permissions, int[] grants) {
+        super.onRequestPermissionsResult(code, permissions, grants);
+        if (code == REQ_BLUETOOTH) {
+            emitBluetoothUpdated();
+            return;
+        }
+        if (code == REQ_MILEAGE) {
+            if (hasGpsPermission() && queuedMileageVehicle != null) {
+                String vehicle = queuedMileageVehicle, mode = queuedMileageMode, category = queuedMileageCategory;
+                queuedMileageVehicle = null;
+                beginMileage(vehicle, mode, category, queuedSaveRoute);
+            } else {
+                queuedMileageVehicle = null;
+                Toast.makeText(this, "Location permission is required to track driving miles", Toast.LENGTH_LONG).show();
+            }
+            return;
+        }
+        if (code == REQ_GPS && gpsCallback != null) {
+            gpsCallback.invoke(gpsOrigin, hasGpsPermission(), false);
+            gpsCallback = null;
+            gpsOrigin = null;
+        }
+    }
+
+    @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == REQ_FILE && pendingFiles != null) {
+            Uri result = resultCode == RESULT_OK && data != null ? data.getData() : null;
+            pendingFiles.onReceiveValue(result == null ? null : new Uri[]{result});
+            pendingFiles = null;
+        }
+    }
+
+    private void emitJs(String handler, String payload){
+        String script="window.PitNudgeAccount&&window.PitNudgeAccount."+handler+"("+JSONObject.quote(payload)+")";
+        runOnUiThread(() -> {if(webView!=null)webView.evaluateJavascript(script,null);});
+    }
+    private String authState(){
+        JSONObject o=new JSONObject();
+        try{
+            o.put("configured", cloudConfigured);
+            FirebaseUser user=auth==null?null:auth.getCurrentUser();
+            if(user!=null){o.put("uid", user.getUid());o.put("email", user.getEmail()==null?"":user.getEmail());
+                o.put("provider", user.getProviderId());}
+        }catch(Exception e){}
+        return o.toString();
+    }
+    private void emitAuthState(){emitJs("onAuthState", authState());}
+    private void emitError(String message){emitJs("onError", message);}
+    private void signInWithApple(){
+        if(!cloudConfigured){emitError("Google and Apple accounts have not been configured.");return;}
+        OAuthProvider.Builder builder=OAuthProvider.newBuilder("apple.com");
+        builder.setScopes(java.util.Arrays.asList("email", "name"));
+        if(auth.getPendingAuthResult()!=null){
+            auth.getPendingAuthResult().addOnSuccessListener(result -> emitAuthState())
+                .addOnFailureListener(e -> emitError("Apple sign-in failed: "+e.getMessage()));
+        }else{
+            auth.startActivityForSignInWithProvider(this,builder.build())
+                .addOnSuccessListener(result -> emitAuthState())
+                .addOnFailureListener(e -> emitError("Apple sign-in failed: "+e.getMessage()));
+        }
+    }
+    private void signInWithGoogle(){
+        if(!cloudConfigured){emitError("Cloud sign-in is not configured yet.");return;}
+        int clientId=getResources().getIdentifier("default_web_client_id","string",getPackageName());
+        if(clientId==0){emitError("Google sign-in needs a Firebase web client ID.");return;}
+        GetSignInWithGoogleOption option=new GetSignInWithGoogleOption.Builder(getString(clientId)).build();
+        GetCredentialRequest request=new GetCredentialRequest.Builder().addCredentialOption(option).build();
+        CredentialManager.create(this).getCredentialAsync(this,request,null,getMainExecutor(),
+            new CredentialManagerCallback<GetCredentialResponse,GetCredentialException>(){
+                @Override public void onResult(GetCredentialResponse response){
+                    if(!(response.getCredential() instanceof CustomCredential)){
+                        emitError("No supported Google account was selected.");return;
+                    }
+                    CustomCredential credential=(CustomCredential)response.getCredential();
+                    if(!GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL.equals(credential.getType())){
+                        emitError("Google credential type was not supported.");return;
+                    }
+                    try{
+                        String token=GoogleIdTokenCredential.createFrom(credential.getData()).getIdToken();
+                        auth.signInWithCredential(GoogleAuthProvider.getCredential(token,null))
+                            .addOnSuccessListener(result -> emitAuthState())
+                            .addOnFailureListener(e -> emitError("Google sign-in failed: "+e.getMessage()));
+                    }catch(Exception ex){emitError("Google token could not be read.");}
+                }
+                @Override public void onError(GetCredentialException error){
+                    android.util.Log.w("PitNudge", "Google sign-in request failed: "+error.getType(), error);
+                    if(error instanceof androidx.credentials.exceptions.NoCredentialException) {
+                        emitError("Google account picker couldn't find an available account. Check your phone has a Google account in Settings, and update Google Play services.");
+                    } else {
+                        emitError("Google sign-in couldn't finish: "+error.getMessage());
+                    }
+                }
+            });
+    }
+    private void fetchCloud(){
+        if(cloud==null||auth==null||auth.getCurrentUser()==null)return;
+        cloud.collection("users").document(auth.getCurrentUser().getUid()).collection("data").document("garage")
+        .get().addOnSuccessListener(doc -> {
+            JSONObject o=new JSONObject();try{
+                o.put("found",doc.exists()&&doc.contains("json"));
+                if(doc.exists()&&doc.contains("json"))o.put("json", doc.getString("json"));
+                if(doc.exists()&&doc.getTimestamp("updatedAt")!=null)o.put("updatedAt", doc.getTimestamp("updatedAt").toDate().getTime());
+            }catch(Exception e){}emitJs("onCloudResult",o.toString());
+        }).addOnFailureListener(e -> {
+            JSONObject o=new JSONObject();try{o.put("error",e.getMessage());}catch(Exception ex){}
+            emitJs("onCloudResult",o.toString());
+        });
+    }
+    private void saveCloud(String json){
+        if(auth==null||cloud==null||auth.getCurrentUser()==null){emitError("Sign in first.");return;}
+        if(json==null||json.length()>700000){emitError("Cloud backup is too large; export a local backup.");return;}
+        pendingJson=json;
+        if(pendingUpload!=null)uploadHandler.removeCallbacks(pendingUpload);
+        pendingUpload=()->{
+            String writeJson=pendingJson;
+            String uid=auth.getCurrentUser()==null?null:auth.getCurrentUser().getUid();
+            if(uid==null)return;
+            Map<String,Object> data=new HashMap<>();data.put("json",writeJson);data.put("updatedAt",FieldValue.serverTimestamp());
+            cloud.collection("users").document(uid).collection("data").document("garage").set(data)
+                .addOnSuccessListener(v->{JSONObject o=new JSONObject();try{o.put("ok",true);}catch(Exception e){}emitJs("onCloudWrite",o.toString());})
+                .addOnFailureListener(e->{JSONObject o=new JSONObject();try{o.put("ok",false);o.put("e

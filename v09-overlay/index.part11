@@ -1,0 +1,11 @@
+ify(err.message||'Could not import backup.')}e.target.value=''}});
+$('closeModal').addEventListener('click',()=>$('modal').close());
+$('modal').addEventListener('close',()=>{liveRouteModal=false;if(routeMapInstance){routeMapInstance.remove();routeMapInstance=null;routeMapLine=null;routeMapEndMarker=null}});
+window.addEventListener('beforeunload',e=>{if(activeTrip&&!activeTrip.native){e.preventDefault();e.returnValue=''}});
+refreshBluetoothDevices(false);
+render();
+if(nativeMileageAvailable()){refreshNativeMileage();setInterval(refreshNativeMileage,3000);window.addEventListener('focus',refreshNativeMileage);document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshNativeMileage()});}
+if(window.NativePitNudge?.getAuthState){window.PitNudgeAccount.onAuthState(window.NativePitNudge.getAuthState());}
+</script>
+</body>
+</html>
